@@ -103,6 +103,14 @@ const getAutoIcms = (address, codOrigem) => {
   return '7%'; 
 };
 
+const resolveClientIcms = (client, codOrigem, defaultIcms = '18%') => {
+  if (!client) return defaultIcms;
+  if (client.icms !== undefined && client.icms !== null && client.icms !== '') {
+      return String(client.icms).includes('%') ? String(client.icms) : `${client.icms}%`;
+  }
+  return getAutoIcms(client.address, codOrigem);
+};
+
 const calculateGrossPrice = (liquidPrice, icmsString, pisCofinsString) => {
   const icms = parseFloat(String(icmsString).replace('%', '')) || 0;
   const pisCofins = parseFloat(String(pisCofinsString).replace('%', '')) || 0; 
@@ -1204,7 +1212,7 @@ function CatalogView({ clients, products, currentProposal, setCurrentProposal, s
 
   if (addModalProd) {
     const client = clients.find(c => c.id === currentProposal.clientId);
-    computedIcms = currentProposal.clientId ? getAutoIcms(client?.address, addModalProd.codOrigem || '0') : (currentProposal.config?.icmsDestino || addModalProd.icms || '18%');
+    computedIcms = currentProposal.clientId ? resolveClientIcms(client, addModalProd.codOrigem, currentProposal.config?.icmsDestino || addModalProd.icms) : (currentProposal.config?.icmsDestino || addModalProd.icms || '18%');
     const pis = addModalProd.pisCofins || '9.25';
     const ipiStr = String(addModalProd.ipi || '0').replace('%', '').trim();
     const ipi = parseFloat(ipiStr) || 0;
@@ -1217,7 +1225,7 @@ function CatalogView({ clients, products, currentProposal, setCurrentProposal, s
     setCurrentProposal(prev => {
       const nextNum = ((prev.items.length + 1) * 10).toString();
       const client = clients.find(c => c.id === prev.clientId);
-      const targetIcms = prev.clientId ? getAutoIcms(client?.address, addModalProd.codOrigem || '0') : (prev.config?.icmsDestino || addModalProd.icms || '18%');
+      const targetIcms = prev.clientId ? resolveClientIcms(client, addModalProd.codOrigem, prev.config?.icmsDestino || addModalProd.icms) : (prev.config?.icmsDestino || addModalProd.icms || '18%');
       
       const newItem = {
         id: Date.now().toString(), productId: addModalProd.id, numeroItem: nextNum, codKalenborn: addModalProd.codKalenborn || addModalProd.name,
@@ -1392,12 +1400,28 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
     const prod = products.find(p => String(p.id) === String(quickAddProductId));
     if (!prod) return;
     const client = clients.find(c => c.id === currentProposal.clientId);
-    const autoIcms = currentProposal.clientId ? getAutoIcms(client?.address, prod.codOrigem || '0') : (cfg.icmsDestino || '18%');
+    const autoIcms = currentProposal.clientId ? resolveClientIcms(client, prod.codOrigem, cfg.icmsDestino) : (cfg.icmsDestino || '18%');
     
     const newItem = { id: Date.now().toString(), productId: prod.id, numeroItem: ((items.length + 1) * 10).toString(), codKalenborn: prod.codKalenborn || prod.name, name: prod.name, price: parseFloat(prod.price) || 0, quantity: 1, um: prod.um || 'UN', ncm: prod.ncm || 'Consultar', icms: autoIcms, ipi: prod.ipi || '0', pisCofins: prod.pisCofins || '9.25', codOrigem: prod.codOrigem || '0' };
     setCurrentProposal(prev => ({ ...prev, items: [...prev.items, newItem] }));
     setQuickAddProductId('');
     showToast("Material Adicionado!");
+  };
+
+  // Função exclusiva para travar o desconto no máximo em 3%
+  const handleDescontoChange = (e) => {
+    let val = parseFloat(e.target.value);
+    if (isNaN(val)) {
+        updateConfig('desconto', '');
+        return;
+    }
+    if (val > 3) {
+        showToast("⚠️ O desconto máximo permitido é de 3%.");
+        val = 3;
+    } else if (val < 0) {
+        val = 0;
+    }
+    updateConfig('desconto', val);
   };
 
   const handleGeneratePDFAndUpload = async () => {
@@ -1648,14 +1672,15 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
                  {showClientDropdown && filteredClients.length > 0 && (
                    <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 shadow-xl rounded-xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200">
                      {filteredClients.map(c=>(<div key={c.id} onClick={()=>{
-                       const address = c.address || '';
+                       const fixedIcms = c.icms !== undefined && c.icms !== null && c.icms !== '' ? (String(c.icms).includes('%') ? String(c.icms) : `${c.icms}%`) : null;
+                       const targetIcmsDestino = fixedIcms || getAutoIcms(c.address || '', '0');
                        setCurrentProposal(p=>({
                          ...p, 
                          clientId: c.id, 
-                         config: { ...p.config, contato: c.contact || 'A/C Comercial', icmsDestino: getAutoIcms(address, '0') }, 
-                         items: p.items.map(i => ({ ...i, icms: getAutoIcms(address, i.codOrigem || '0') }))
+                         config: { ...p.config, contato: c.contact || 'A/C Comercial', icmsDestino: targetIcmsDestino }, 
+                         items: p.items.map(i => ({ ...i, icms: fixedIcms || getAutoIcms(c.address || '', i.codOrigem || '0') }))
                        })); 
-                       setClientSearchText(c.company||c.nome); setShowClientDropdown(false); showToast(`ICMS recalculado automaticamente!`);
+                       setClientSearchText(c.company||c.nome); setShowClientDropdown(false); showToast(fixedIcms ? `ICMS fixo do cliente (${fixedIcms}) aplicado!` : `ICMS recalculado automaticamente!`);
                      }} className="p-3 border-b border-slate-50 hover:bg-blue-50 cursor-pointer touch-manipulation"><div className="font-bold text-sm text-slate-800">{c.company||c.nome}</div><div className="text-[10px] text-slate-500 mt-1">{formatCNPJ(c.document||c.cnpj)}</div></div>))}
                    </div>
                  )}
@@ -1744,7 +1769,7 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
                  
                  <div className="lg:hidden flex justify-between items-center mb-4 relative z-10 border-b border-white/10 pb-4">
                    <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Desc. Comercial (%)</span>
-                   <input type="number" step="0.1" value={cfg.desconto || 0} onChange={e => updateConfig('desconto', e.target.value)} className="w-20 bg-slate-800 border border-slate-600 text-white rounded-lg p-2 text-center text-xs outline-none focus:border-blue-500 shadow-inner" />
+                   <input type="number" step="0.1" max="3" min="0" value={cfg.desconto || 0} onChange={handleDescontoChange} className="w-20 bg-slate-800 border border-slate-600 text-white rounded-lg p-2 text-center text-xs outline-none focus:border-blue-500 shadow-inner" />
                  </div>
 
                  <div className="flex justify-between text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1 relative z-10"><span>Subtotal Bruto (s/IPI):</span><span className="font-mono text-slate-200">R$ {formatNum(subtotalBruto)}</span></div>
@@ -1776,7 +1801,7 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
         <div className="p-4 bg-white border-t border-slate-200 hidden lg:flex gap-4 shrink-0 z-50 w-[480px] xl:w-[550px]">
            <div className="w-24 text-center">
              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Desc %</label>
-             <input type="number" step="0.1" value={cfg.desconto || 0} onChange={e => updateConfig('desconto', e.target.value)} className="w-full border-2 border-slate-200 h-12 rounded-xl text-sm font-black text-center outline-none focus:border-blue-500 bg-white shadow-sm" />
+             <input type="number" step="0.1" max="3" min="0" value={cfg.desconto || 0} onChange={handleDescontoChange} className="w-full border-2 border-slate-200 h-12 rounded-xl text-sm font-black text-center outline-none focus:border-blue-500 bg-white shadow-sm" />
            </div>
            <button onClick={handleGeneratePDFAndUpload} disabled={isGeneratingPDF} className="flex-1 bg-[#0F172A] text-white font-black py-4 rounded-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 text-xs uppercase tracking-[0.2em] shadow-lg active:scale-95 mt-4 cursor-pointer touch-manipulation">
              {isGeneratingPDF ? <RefreshCw className="animate-spin" size={18} /> : <Download size={18} />} <span>Baixar PDF Oficial</span>
