@@ -1212,7 +1212,7 @@ function CatalogView({ clients, products, currentProposal, setCurrentProposal, s
 
   if (addModalProd) {
     const client = clients.find(c => c.id === currentProposal.clientId);
-    computedIcms = currentProposal.clientId ? resolveClientIcms(client, addModalProd.codOrigem, currentProposal.config?.icmsDestino || addModalProd.icms) : (currentProposal.config?.icmsDestino || addModalProd.icms || '18%');
+    computedIcms = currentProposal.clientId ? resolveClientIcms(client, addModalProd.codorigem || addModalProd.codOrigem, currentProposal.config?.icmsDestino || addModalProd.icms) : (currentProposal.config?.icmsDestino || addModalProd.icms || '18%');
     const pis = addModalProd.pisCofins || '9.25';
     const ipiStr = String(addModalProd.ipi || '0').replace('%', '').trim();
     const ipi = parseFloat(ipiStr) || 0;
@@ -1225,12 +1225,12 @@ function CatalogView({ clients, products, currentProposal, setCurrentProposal, s
     setCurrentProposal(prev => {
       const nextNum = ((prev.items.length + 1) * 10).toString();
       const client = clients.find(c => c.id === prev.clientId);
-      const targetIcms = prev.clientId ? resolveClientIcms(client, addModalProd.codOrigem, prev.config?.icmsDestino || addModalProd.icms) : (prev.config?.icmsDestino || addModalProd.icms || '18%');
+      const targetIcms = prev.clientId ? resolveClientIcms(client, addModalProd.codorigem || addModalProd.codOrigem, prev.config?.icmsDestino || addModalProd.icms) : (prev.config?.icmsDestino || addModalProd.icms || '18%');
       
       const newItem = {
         id: Date.now().toString(), productId: addModalProd.id, numeroItem: nextNum, codKalenborn: addModalProd.codKalenborn || addModalProd.name,
-        codOrigem: addModalProd.codOrigem || '0', um: addModalProd.um || 'KG', ncm: addModalProd.ncm || 'Consultar', icms: targetIcms, ipi: addModalProd.ipi || '0', pisCofins: addModalProd.pisCofins || '9.25',
-        price: parseFloat(addPrice) || 0, quantity: parseFloat(addQty) || 1
+        codOrigem: addModalProd.codorigem || addModalProd.codOrigem || '0', um: addModalProd.um || 'KG', ncm: addModalProd.ncm || 'Consultar', icms: targetIcms, ipi: addModalProd.ipi || '0', pisCofins: addModalProd.pisCofins || '9.25',
+        price: parseFloat(addPrice) || 0, quantity: parseFloat(addQty) || 1, codvale: addModalProd.codvale || '', descricao_original: addModalProd.descricao_original || ''
       };
       let newRef = prev.config.referencia;
       if (!newRef) newRef = addModalProd.codKalenborn;
@@ -1400,9 +1400,9 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
     const prod = products.find(p => String(p.id) === String(quickAddProductId));
     if (!prod) return;
     const client = clients.find(c => c.id === currentProposal.clientId);
-    const autoIcms = currentProposal.clientId ? resolveClientIcms(client, prod.codOrigem, cfg.icmsDestino) : (cfg.icmsDestino || '18%');
+    const autoIcms = currentProposal.clientId ? resolveClientIcms(client, prod.codorigem || prod.codOrigem, cfg.icmsDestino) : (cfg.icmsDestino || '18%');
     
-    const newItem = { id: Date.now().toString(), productId: prod.id, numeroItem: ((items.length + 1) * 10).toString(), codKalenborn: prod.codKalenborn || prod.name, name: prod.name, price: parseFloat(prod.price) || 0, quantity: 1, um: prod.um || 'UN', ncm: prod.ncm || 'Consultar', icms: autoIcms, ipi: prod.ipi || '0', pisCofins: prod.pisCofins || '9.25', codOrigem: prod.codOrigem || '0' };
+    const newItem = { id: Date.now().toString(), productId: prod.id, numeroItem: ((items.length + 1) * 10).toString(), codKalenborn: prod.codKalenborn || prod.name, name: prod.name, price: parseFloat(prod.price) || 0, quantity: 1, um: prod.um || 'UN', ncm: prod.ncm || 'Consultar', icms: autoIcms, ipi: prod.ipi || '0', pisCofins: prod.pisCofins || '9.25', codOrigem: prod.codorigem || prod.codOrigem || '0', codvale: prod.codvale || '', descricao_original: prod.descricao_original || '' };
     setCurrentProposal(prev => ({ ...prev, items: [...prev.items, newItem] }));
     setQuickAddProductId('');
     showToast("Material Adicionado!");
@@ -1564,12 +1564,12 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
             <thead>
               <tr className="bg-gray-200 font-bold" style={{ pageBreakInside: 'avoid' }}>
                 <th className="py-1 px-1 border border-black text-center" style={{ width: '4%' }}>Item</th>
-                <th className="py-1 px-2 border border-black" style={{ width: '35%' }}>Descrição do Material</th>
-                <th className="py-1 px-2 border border-black text-center" style={{ width: '8%' }}>Código Origem</th>
+                <th className="py-1 px-2 border border-black" style={{ width: '34%' }}>Descrição do Material</th>
+                <th className="py-1 px-2 border border-black text-center" style={{ width: '7%' }}>Cód Origem</th>
                 <th className="py-1 px-1 border border-black text-center" style={{ width: '5%' }}>Qtde</th>
                 <th className="py-1 px-1 border border-black text-center" style={{ width: '4%' }}>UN</th>
-                <th className="py-1 px-2 border border-black text-right" style={{ width: '15%' }}>Líquido Un.</th>
-                <th className="py-1 px-2 border border-black text-right" style={{ width: '15%' }}>Bruto Un.</th>
+                <th className="py-1 px-2 border border-black text-right" style={{ width: '13%' }}>Líquido Un.</th>
+                <th className="py-1 px-2 border border-black text-right" style={{ width: '13%' }}>Bruto Un.</th>
                 <th className="py-1 px-2 border border-black text-right" style={{ width: '20%' }}>Vlr. Total</th>
               </tr>
             </thead>
@@ -1584,7 +1584,10 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
                   return (
                     <tr key={item.id} style={{ pageBreakInside: 'avoid' }}>
                       <td className="py-1 px-1 border-b border-r border-black text-center font-bold">{item.numeroItem || index + 1}</td>
-                      <td className="py-1 px-2 border-b border-r border-black uppercase font-bold" style={{ wordBreak: 'break-word' }}>{item.codKalenborn}</td>
+                      <td className="py-1 px-2 border-b border-r border-black uppercase" style={{ wordBreak: 'break-word' }}>
+                        <div className="font-bold">{item.codKalenborn}</div>
+                        <div className="text-[9px] mt-0.5 text-gray-700">KBN: {item.productId}{item.codvale ? ` | VALE: ${item.codvale}` : ''}</div>
+                      </td>
                       <td className="py-1 px-2 border-b border-r border-black text-center">{item.codOrigem}</td>
                       <td className="py-1 px-1 border-b border-r border-black text-center">{item.quantity}</td>
                       <td className="py-1 px-1 border-b border-r border-black text-center">{item.um}</td>
@@ -1626,6 +1629,28 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
        <div className="text-[10px] mt-1 mb-4 text-black" style={{ pageBreakInside: 'avoid' }}>
           Código de Origem: 0-Nacional, exceto as indicadas nos códigos 3, 4, 5 e 8
        </div>
+
+       {items.length > 0 && items.some(it => {
+           const p = products.find(prod => String(prod.id) === String(it.productId));
+           return it.descricao_original || p?.descricao_original;
+       }) && (
+         <div className="text-[10px] mb-4 text-black" style={{ pageBreakInside: 'avoid' }}>
+            <div className="font-bold mb-1 uppercase">Descrições Detalhadas dos Materiais:</div>
+            <div className="space-y-1.5">
+              {items.map((it, idx) => {
+                 const p = products.find(prod => String(prod.id) === String(it.productId));
+                 const desc = it.descricao_original || p?.descricao_original;
+                 if (!desc) return null;
+                 return (
+                   <div key={`desc_${it.id}`} className="text-justify leading-snug">
+                     <span className="font-bold mr-1">Item {it.numeroItem || idx + 1}:</span>
+                     <span>{desc}</span>
+                   </div>
+                 );
+              })}
+            </div>
+         </div>
+       )}
 
        <div className="border-t border-black my-4" style={{ pageBreakInside: 'avoid' }}></div>
 
@@ -1678,7 +1703,7 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
                          ...p, 
                          clientId: c.id, 
                          config: { ...p.config, contato: c.contact || 'A/C Comercial', icmsDestino: targetIcmsDestino }, 
-                         items: p.items.map(i => ({ ...i, icms: fixedIcms || getAutoIcms(c.address || '', i.codOrigem || '0') }))
+                         items: p.items.map(i => ({ ...i, icms: fixedIcms || getAutoIcms(c.address || '', i.codorigem || i.codOrigem || '0') }))
                        })); 
                        setClientSearchText(c.company||c.nome); setShowClientDropdown(false); showToast(fixedIcms ? `ICMS fixo do cliente (${fixedIcms}) aplicado!` : `ICMS recalculado automaticamente!`);
                      }} className="p-3 border-b border-slate-50 hover:bg-blue-50 cursor-pointer touch-manipulation"><div className="font-bold text-sm text-slate-800">{c.company||c.nome}</div><div className="text-[10px] text-slate-500 mt-1">{formatCNPJ(c.document||c.cnpj)}</div></div>))}
@@ -1728,7 +1753,10 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
                     <button onClick={() => removeItem(it.id)} className="absolute top-2 right-2 text-slate-300 hover:text-red-500 p-1.5 bg-slate-50 rounded transition-colors cursor-pointer touch-manipulation"><Trash2 size={14}/></button>
                     <div className="flex gap-2 mb-2 pr-8">
                        <input type="text" value={it.numeroItem || ''} onChange={e=>updateItem(it.id, 'numeroItem', e.target.value)} className="w-8 border-b border-slate-200 text-center font-bold text-xs outline-none focus:border-blue-500 pb-1" title="Item Nº" />
-                       <input type="text" value={it.codKalenborn || ''} onChange={e=>updateItem(it.id, 'codKalenborn', e.target.value)} className="flex-1 border-b border-slate-200 font-bold text-xs sm:text-sm text-slate-800 outline-none focus:border-blue-500 pb-1 truncate uppercase" />
+                       <div className="flex-1 flex flex-col">
+                         <input type="text" value={it.codKalenborn || ''} onChange={e=>updateItem(it.id, 'codKalenborn', e.target.value)} className="w-full border-b border-slate-200 font-bold text-xs sm:text-sm text-slate-800 outline-none focus:border-blue-500 pb-1 truncate uppercase" />
+                         <div className="text-[9px] text-slate-500 mt-1 uppercase font-bold">KBN: {it.productId} {it.codvale ? `| VALE: ${it.codvale}` : ''}</div>
+                       </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 mb-2">
