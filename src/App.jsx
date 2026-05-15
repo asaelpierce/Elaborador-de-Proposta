@@ -20,6 +20,9 @@ const SUPABASE_KEY = "sb_publishable_KCGnYnt31h45QuNhHLFvxA_0MuQAaq6";
 
 const defaultLogoBase64 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMjAiIGhlaWdodD0iNjAiPjxyZWN0IHdpZHRoPSIyMjAiIGhlaWdodD0iNjAiIGZpbGw9IiNmZmZmZmYiLz48dGV4dCB4PSIxMCIgeT0iNDAiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyOCIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiMxNDMyNWEiPkthbGVuYm9ybjwvdGV4dD48L3N2Zz4=";
 
+// PRODUTOS COM REGRA ESTRITA DE ICMS (Kalcret e Kalfix HTN 300)
+const SPECIAL_ICMS_PRODUCTS = ['3083', '16511', '4606', '4608', '4610', '4609', '4613', '4612', '4611', '17658'];
+
 // --- Motor de API Supabase ---
 async function supabaseRequest(table, method = 'GET', body = null, merge = false) {
   const token = localStorage.getItem('kbn_supabase_token') || SUPABASE_KEY;
@@ -87,11 +90,18 @@ const formatNum = (v) => {
   return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0);
 };
 
-const getAutoIcms = (address, codOrigem) => {
-  if (!address) return '18%'; 
+// Cálculo Automático de ICMS com REGRA ESTRITA para Produtos Especiais
+const getAutoIcms = (address, codOrigem, productId = null) => {
+  const isSpecial = SPECIAL_ICMS_PRODUCTS.includes(String(productId));
+
+  if (!address) return isSpecial ? '18%' : '18%'; 
+  
   const upperAddress = address.toUpperCase();
   const isMG = /\b(MG|MINAS GERAIS)\b/.test(upperAddress) || upperAddress.includes('-MG') || upperAddress.includes('/MG');
   
+  // REGRA EXCLUSIVA DOS PRODUTOS ESPECIAIS (Sobrepõe importados e outras UFs)
+  if (isSpecial) return isMG ? '18%' : '4%';
+
   if (isMG) return '18%';
 
   const isImported = ['1', '2', '3', '8'].includes(String(codOrigem).trim());
@@ -103,14 +113,7 @@ const getAutoIcms = (address, codOrigem) => {
   return '7%'; 
 };
 
-const resolveClientIcms = (client, codOrigem, defaultIcms = '18%') => {
-  if (!client) return defaultIcms;
-  if (client.icms !== undefined && client.icms !== null && client.icms !== '') {
-      return String(client.icms).includes('%') ? String(client.icms) : `${client.icms}%`;
-  }
-  return getAutoIcms(client.address, codOrigem);
-};
-
+// O Valor Bruto embute o ICMS e o PIS/COFINS (Não o IPI)
 const calculateGrossPrice = (liquidPrice, icmsString, pisCofinsString) => {
   const icms = parseFloat(String(icmsString).replace('%', '')) || 0;
   const pisCofins = parseFloat(String(pisCofinsString).replace('%', '')) || 0; 
@@ -119,6 +122,7 @@ const calculateGrossPrice = (liquidPrice, icmsString, pisCofinsString) => {
   return liquidPrice / (1 - totalTaxes);
 };
 
+// O IPI incide sobre o Total do Item (Bruto * Qtd)
 const calculateProposalTotals = (items, descontoPct) => {
   let subtotalBrutoSemIpi = 0;
   let totalIpi = 0;
@@ -127,7 +131,7 @@ const calculateProposalTotals = (items, descontoPct) => {
   items.forEach(it => {
     const gross = calculateGrossPrice(it.price, it.icms, it.pisCofins);
     const ipi = parseFloat(it.ipi || 0);
-    const itemTotalBruto = gross * it.quantity;
+    const itemTotalBruto = gross * it.quantity; // Sem IPI
     const itemIpiVal = itemTotalBruto * (ipi / 100);
     
     subtotalBrutoSemIpi += itemTotalBruto;
@@ -137,21 +141,17 @@ const calculateProposalTotals = (items, descontoPct) => {
   
   const desc = parseFloat(descontoPct) || 0;
   const valorDesconto = subtotalBrutoSemIpi * (desc / 100);
-  const totalFinal = (subtotalBrutoSemIpi - valorDesconto) + totalIpi;
+  const totalFinal = (subtotalBrutoSemIpi - valorDesconto) + totalIpi; // IPI é somado após o desconto
 
   return { subtotalBruto: subtotalBrutoSemIpi, subtotalLiquido, totalIpi, total: totalFinal, valorDesconto };
 };
 
-const getEmptyProposal = () => {
-  const user = localStorage.getItem('kbn_user') || 'Comercial';
-  const userName = user.charAt(0).toUpperCase() + user.slice(1);
-  return {
-    id: '', numeroUnico: '', status: 'Pendente', clientId: '', items: [],
-    attachment_url: null,
-    config: { projeto: 'Gerado Automático', date: new Date().toLocaleDateString('pt-BR'), emissor: userName, vendedor: user, contato: '', referencia: '', observacoesAdicionais: '', condicaoPagamento: '30 Dias', transporte: 'CIF', naturezaOperacao: 'Venda para Consumo', desconto: 0, icmsDestino: '18%' },
-    total: 0
-  };
-};
+const getEmptyProposal = () => ({
+  id: '', numeroUnico: '', status: 'Pendente', clientId: '', items: [],
+  attachment_url: null,
+  config: { projeto: 'Gerado Automático', date: new Date().toLocaleDateString('pt-BR'), emissor: 'Comercial Kalenborn', contato: '', referencia: '', observacoesAdicionais: '', condicaoPagamento: '30 Dias', transporte: 'CIF', naturezaOperacao: 'Venda para Consumo', desconto: 0, icmsDestino: '18%' },
+  total: 0
+});
 
 async function askChatGPT(prompt, apiKey, expectJson = false) {
   if (!apiKey) throw new Error("Chave API ausente.");
@@ -1176,6 +1176,7 @@ function CatalogView({ clients, products, currentProposal, setCurrentProposal, s
   const [addModalProd, setAddModalProd] = useState(null);
   const [addQty, setAddQty] = useState(1);
   const [addPrice, setAddPrice] = useState(0);
+  const [manualDestinoMG, setManualDestinoMG] = useState(true);
 
   const filteredProducts = useMemo(() => {
     if (!searchTerm) return products;
@@ -1205,14 +1206,31 @@ function CatalogView({ clients, products, currentProposal, setCurrentProposal, s
     } catch (error) { console.error(error); showToast("Erro ao consultar a IA."); } finally { setIsSearchingAI(false); }
   };
 
-  const openAddModal = (prod) => { setAddModalProd(prod); setAddQty(1); setAddPrice(prod.price || 0); };
+  const openAddModal = (prod) => { 
+    setAddModalProd(prod); 
+    setAddPrice(prod.price || 0); 
+    setAddQty(1); 
+    setManualDestinoMG(true);
+  };
   
+  const isSpecialProduct = addModalProd && SPECIAL_ICMS_PRODUCTS.includes(String(addModalProd.id));
+
   let previewGross = 0; let previewTotal = 0;
   let computedIcms = '18%';
 
   if (addModalProd) {
     const client = clients.find(c => c.id === currentProposal.clientId);
-    computedIcms = currentProposal.clientId ? resolveClientIcms(client, addModalProd.codorigem || addModalProd.codOrigem, currentProposal.config?.icmsDestino || addModalProd.icms) : (currentProposal.config?.icmsDestino || addModalProd.icms || '18%');
+    if (currentProposal.clientId) {
+      computedIcms = isSpecialProduct 
+          ? getAutoIcms(client?.address, addModalProd.codOrigem || '0', addModalProd.id) 
+          : (client?.icms ? (String(client.icms).includes('%') ? client.icms : `${client.icms}%`) : getAutoIcms(client?.address, addModalProd.codOrigem || '0', addModalProd.id));
+    } else {
+      if (isSpecialProduct) {
+        computedIcms = manualDestinoMG ? '18%' : '4%';
+      } else {
+        computedIcms = currentProposal.config?.icmsDestino || addModalProd.icms || '18%';
+      }
+    }
     const pis = addModalProd.pisCofins || '9.25';
     const ipiStr = String(addModalProd.ipi || '0').replace('%', '').trim();
     const ipi = parseFloat(ipiStr) || 0;
@@ -1225,11 +1243,19 @@ function CatalogView({ clients, products, currentProposal, setCurrentProposal, s
     setCurrentProposal(prev => {
       const nextNum = ((prev.items.length + 1) * 10).toString();
       const client = clients.find(c => c.id === prev.clientId);
-      const targetIcms = prev.clientId ? resolveClientIcms(client, addModalProd.codorigem || addModalProd.codOrigem, prev.config?.icmsDestino || addModalProd.icms) : (prev.config?.icmsDestino || addModalProd.icms || '18%');
+      const isSpec = SPECIAL_ICMS_PRODUCTS.includes(String(addModalProd.id));
+      
+      let targetIcms = '18%';
+      if (prev.clientId) {
+         const clientFixedIcms = client?.icms ? (String(client.icms).includes('%') ? client.icms : `${client.icms}%`) : null;
+         targetIcms = isSpec ? getAutoIcms(client?.address, addModalProd.codOrigem || '0', addModalProd.id) : (clientFixedIcms || getAutoIcms(client?.address, addModalProd.codOrigem || '0', addModalProd.id));
+      } else {
+         targetIcms = isSpec ? (manualDestinoMG ? '18%' : '4%') : (prev.config?.icmsDestino || addModalProd.icms || '18%');
+      }
       
       const newItem = {
         id: Date.now().toString(), productId: addModalProd.id, numeroItem: nextNum, codKalenborn: addModalProd.codKalenborn || addModalProd.name,
-        codOrigem: addModalProd.codorigem || addModalProd.codOrigem || '0', um: addModalProd.um || 'KG', ncm: addModalProd.ncm || 'Consultar', icms: targetIcms, ipi: addModalProd.ipi || '0', pisCofins: addModalProd.pisCofins || '9.25',
+        codOrigem: addModalProd.codOrigem || '0', um: addModalProd.um || 'KG', ncm: addModalProd.ncm || 'Consultar', icms: targetIcms, ipi: addModalProd.ipi || '0', pisCofins: addModalProd.pisCofins || '9.25',
         price: parseFloat(addPrice) || 0, quantity: parseFloat(addQty) || 1, codvale: addModalProd.codvale || '', descricao_original: addModalProd.descricao_original || ''
       };
       let newRef = prev.config.referencia;
@@ -1287,8 +1313,9 @@ function CatalogView({ clients, products, currentProposal, setCurrentProposal, s
       <div className="flex-1 overflow-y-auto custom-scrollbar pb-10">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {(aiSuggestions?.length > 0 ? aiSuggestions : filteredProducts).map(p => (
-            <div key={p.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col">
-              <div className="flex justify-between items-start mb-3">
+            <div key={p.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col relative overflow-hidden">
+              {SPECIAL_ICMS_PRODUCTS.includes(String(p.id)) && <div className="absolute top-0 right-0 bg-orange-500 text-white text-[8px] font-black px-2 py-1 rounded-bl-lg shadow-sm">REGRA ICMS</div>}
+              <div className="flex justify-between items-start mb-3 mt-1">
                 <div className="flex flex-col gap-1">
                   <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded w-fit truncate max-w-[150px]">KBN: {p.id}</span>
                   {p.codvale && <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-1 rounded w-fit truncate max-w-[150px]">Vale: {p.codvale}</span>}
@@ -1315,13 +1342,24 @@ function CatalogView({ clients, products, currentProposal, setCurrentProposal, s
                 <div className="font-bold text-slate-800">{addModalProd.codKalenborn || addModalProd.name}</div>
                 <div className="text-[10px] text-slate-500 mt-1">NCM: {addModalProd.ncm} | KBN: {addModalProd.id} {addModalProd.codvale ? `| Vale: ${addModalProd.codvale}` : ''}</div>
               </div>
+
+              {isSpecialProduct && !currentProposal.clientId && (
+                 <div className="bg-orange-50 border border-orange-200 p-3 rounded-xl mt-2 animate-in fade-in">
+                    <label className="text-[10px] font-black text-orange-800 uppercase block mb-2">📍 Destino deste material especial:</label>
+                    <div className="flex gap-2">
+                      <button onClick={() => setManualDestinoMG(true)} className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer ${manualDestinoMG ? 'bg-orange-500 text-white shadow-md' : 'bg-white text-orange-600 border border-orange-200 hover:bg-orange-100'}`}>Dentro de MG (18%)</button>
+                      <button onClick={() => setManualDestinoMG(false)} className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer ${!manualDestinoMG ? 'bg-orange-500 text-white shadow-md' : 'bg-white text-orange-600 border border-orange-200 hover:bg-orange-100'}`}>Fora de MG (4%)</button>
+                    </div>
+                 </div>
+               )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="text-xs font-bold text-slate-600 block mb-1">Quantidade ({addModalProd.um})</label><input type="number" step="0.01" value={addQty} onChange={(e) => setAddQty(e.target.value)} className="w-full border border-slate-300 rounded-lg p-3 outline-none text-center font-bold text-lg text-blue-700 bg-blue-50" /></div>
                 <div><label className="text-xs font-bold text-slate-600 block mb-1">Preço Unit. (R$)</label><input type="number" step="0.01" value={addPrice} onChange={(e) => setAddPrice(e.target.value)} className="w-full border border-slate-300 rounded-lg p-3 outline-none text-center font-bold text-lg text-emerald-700 bg-emerald-50" /></div>
               </div>
               <div className="bg-slate-800 text-white rounded-lg p-3 shadow-inner border border-slate-700">
                 <div className="flex justify-between items-center text-xs text-slate-300 mb-1"><span>Bruto Un. c/ Impostos:</span><span>R$ {formatNum(previewGross)}</span></div>
-                <div className="text-[9px] text-slate-500 mb-2">ICMS: {computedIcms} | PIS/COF: {addModalProd.pisCofins || '9.25'}% | IPI: {addModalProd.ipi || '0'}%</div>
+                <div className="text-[9px] text-slate-400 mb-2 font-bold uppercase tracking-widest">ICMS: {computedIcms} | PIS/COF: {addModalProd.pisCofins || '9.25'}% | IPI: {addModalProd.ipi || '0'}%</div>
                 <div className="flex justify-between items-center font-bold text-emerald-400 text-sm border-t border-slate-600 pt-2"><span>Total (c/ IPI):</span><span>R$ {formatNum(previewTotal)}</span></div>
               </div>
             </div>
@@ -1400,9 +1438,17 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
     const prod = products.find(p => String(p.id) === String(quickAddProductId));
     if (!prod) return;
     const client = clients.find(c => c.id === currentProposal.clientId);
-    const autoIcms = currentProposal.clientId ? resolveClientIcms(client, prod.codorigem || prod.codOrigem, cfg.icmsDestino) : (cfg.icmsDestino || '18%');
+    const isSpec = SPECIAL_ICMS_PRODUCTS.includes(String(prod.id));
     
-    const newItem = { id: Date.now().toString(), productId: prod.id, numeroItem: ((items.length + 1) * 10).toString(), codKalenborn: prod.codKalenborn || prod.name, name: prod.name, price: parseFloat(prod.price) || 0, quantity: 1, um: prod.um || 'UN', ncm: prod.ncm || 'Consultar', icms: autoIcms, ipi: prod.ipi || '0', pisCofins: prod.pisCofins || '9.25', codOrigem: prod.codorigem || prod.codOrigem || '0', codvale: prod.codvale || '', descricao_original: prod.descricao_original || '' };
+    let autoIcms = '18%';
+    if (currentProposal.clientId) {
+       const clientFixedIcms = client?.icms ? (String(client.icms).includes('%') ? client.icms : `${client.icms}%`) : null;
+       autoIcms = isSpec ? getAutoIcms(client?.address, prod.codOrigem || '0', prod.id) : (clientFixedIcms || getAutoIcms(client?.address, prod.codOrigem || '0', prod.id));
+    } else {
+       autoIcms = isSpec ? '18%' : (cfg.icmsDestino || '18%');
+    }
+    
+    const newItem = { id: Date.now().toString(), productId: prod.id, numeroItem: ((items.length + 1) * 10).toString(), codKalenborn: prod.codKalenborn || prod.name, name: prod.name, price: parseFloat(prod.price) || 0, quantity: 1, um: prod.um || 'UN', ncm: prod.ncm || 'Consultar', icms: autoIcms, ipi: prod.ipi || '0', pisCofins: prod.pisCofins || '9.25', codOrigem: prod.codOrigem || '0', codvale: prod.codvale || '', descricao_original: prod.descricao_original || '' };
     setCurrentProposal(prev => ({ ...prev, items: [...prev.items, newItem] }));
     setQuickAddProductId('');
     showToast("Material Adicionado!");
@@ -1668,7 +1714,7 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
           )}
        </div>
 
-       <footer className="mt-auto pt-2 border-t border-black text-[10px] text-center font-bold" style={{ pageBreakInside: 'avoid' }}>
+       <footer className="mt-auto pt-2 border-t border-black text-[9px] text-center font-bold" style={{ pageBreakInside: 'avoid' }}>
           <div>Tel.: +55 31 3499-4000 | comercial@kalenborn.com.br | www.kalenborn.com.br</div>
        </footer>
     </div>
@@ -1698,12 +1744,16 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
                    <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 shadow-xl rounded-xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200">
                      {filteredClients.map(c=>(<div key={c.id} onClick={()=>{
                        const fixedIcms = c.icms !== undefined && c.icms !== null && c.icms !== '' ? (String(c.icms).includes('%') ? String(c.icms) : `${c.icms}%`) : null;
-                       const targetIcmsDestino = fixedIcms || getAutoIcms(c.address || '', '0');
+                       const targetIcmsDestino = fixedIcms || getAutoIcms(c.address || '', '0', null);
                        setCurrentProposal(p=>({
                          ...p, 
                          clientId: c.id, 
                          config: { ...p.config, contato: c.contact || 'A/C Comercial', icmsDestino: targetIcmsDestino }, 
-                         items: p.items.map(i => ({ ...i, icms: fixedIcms || getAutoIcms(c.address || '', i.codorigem || i.codOrigem || '0') }))
+                         items: p.items.map(i => {
+                             const isSpec = SPECIAL_ICMS_PRODUCTS.includes(String(i.productId));
+                             const finalIcms = isSpec ? getAutoIcms(c.address || '', i.codOrigem || '0', i.productId) : (fixedIcms || getAutoIcms(c.address || '', i.codOrigem || '0', i.productId));
+                             return { ...i, icms: finalIcms };
+                         })
                        })); 
                        setClientSearchText(c.company||c.nome); setShowClientDropdown(false); showToast(fixedIcms ? `ICMS fixo do cliente (${fixedIcms}) aplicado!` : `ICMS recalculado automaticamente!`);
                      }} className="p-3 border-b border-slate-50 hover:bg-blue-50 cursor-pointer touch-manipulation"><div className="font-bold text-sm text-slate-800">{c.company||c.nome}</div><div className="text-[10px] text-slate-500 mt-1">{formatCNPJ(c.document||c.cnpj)}</div></div>))}
@@ -2044,7 +2094,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
 
   const eligibleProducts = useMemo(() => {
     return products.filter(p => {
-      const txt = `${p.name} ${p.codKalenborn} ${p.descricao_original || ''} ${p.id}`.toLowerCase();
+      const txt = `${p.name} ${p.codKalenborn} ${p.descricao_original || ''} ${p.caracteristica || ''} ${p.id}`.toLowerCase();
       return txt.includes('bandeja') || txt.includes('kalimpact') || txt.includes('wphskrx') || txt.includes('kbwpklt') || txt.includes('placa');
     });
   }, [products]);
@@ -2056,6 +2106,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
       (p.name && p.name.toLowerCase().includes(lower)) || 
       (p.codKalenborn && p.codKalenborn.toLowerCase().includes(lower)) ||
       (p.descricao_original && p.descricao_original.toLowerCase().includes(lower)) ||
+      (p.caracteristica && p.caracteristica.toLowerCase().includes(lower)) ||
       (p.codvale && String(p.codvale).toLowerCase().includes(lower)) ||
       (p.id && String(p.id).toLowerCase().includes(lower))
     );
@@ -2134,9 +2185,9 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
 
         <div className="space-y-6">
           <div>
-            <h3 className="font-bold text-sm uppercase bg-black text-white px-3 py-1 inline-block mb-2">Descrição Longa</h3>
-            <div className="p-4 border border-black min-h-[100px] text-sm leading-relaxed text-justify uppercase font-bold">
-              {selectedProduct.descricao_original || selectedProduct.codKalenborn || 'Sem descrição detalhada'}
+            <h3 className="font-bold text-sm uppercase bg-black text-white px-3 py-1 inline-block mb-2">Descrição / Característica</h3>
+            <div className="p-4 border border-black min-h-[100px] text-sm leading-relaxed text-justify uppercase font-bold whitespace-pre-wrap">
+              {selectedProduct.caracteristica || selectedProduct.descricao_original || selectedProduct.codKalenborn || 'Sem descrição detalhada'}
             </div>
           </div>
 
