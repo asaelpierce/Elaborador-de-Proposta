@@ -95,6 +95,34 @@ async function supabaseUpload(bucket, path, file, _retry = false) {
   return `${SUPABASE_URL}storage/v1/object/public/${bucket}/${path}`;
 }
 
+async function supabaseRequestPaged(table, pageSize = 1000, _retry = false) {
+  let all = [];
+  let from = 0;
+  while (true) {
+    const token = localStorage.getItem('kbn_supabase_token') || SUPABASE_KEY;
+    const res = await fetch(`${SUPABASE_REST_URL}${table}`, {
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${token}`,
+        "Range-Unit": "items",
+        "Range": `${from}-${from + pageSize - 1}`
+      }
+    });
+    if (res.status === 401 && !_retry) {
+      const newToken = await refreshSupabaseToken();
+      if (newToken) { _retry = true; continue; }
+      clearSession();
+      throw new Error('Sessão expirada. Faça login novamente.');
+    }
+    if (!res.ok && res.status !== 206) throw new Error(await res.text());
+    const page = await res.json();
+    all = all.concat(page);
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 const formatCNPJ = (c) => {
   if (!c) return '';
   const clean = String(c).replace(/\D/g, '');
@@ -848,7 +876,7 @@ export default function App() {
     setLoading(true);
     try {
       const results = await Promise.allSettled([
-        supabaseRequest('clients?select=*&order=company.asc'),
+        supabaseRequestPaged('clients?select=*&order=company.asc'),
         supabaseRequest('products?select=*&order=name.asc'),
         supabaseRequest('observations?select=*'),
         supabaseRequest('proposals?select=*&order=created_at.desc'),
