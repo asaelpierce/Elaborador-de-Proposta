@@ -1888,8 +1888,8 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
   }, [currentProposal.clientId, clients]);
 
   const filteredClients = clients.filter(c => {
-     const s = clientSearchText.toLowerCase();
-     return (c.company?.toLowerCase().includes(s)) || (c.document?.includes(s));
+     const s = clientSearchText.toLowerCase().trim();
+     return (c.company?.toLowerCase().includes(s)) || (c.document?.includes(s)) || (String(c.id).toLowerCase().includes(s));
   }).slice(0, 10);
 
   const selectedClient = clients.find(c => c.id === currentProposal.clientId);
@@ -2051,7 +2051,7 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
              <div className="space-y-3">
                <div className="relative">
                  <label className={labelClass}>Pesquisar Cliente</label>
-                 <div className="relative"><input type="text" placeholder="Nome ou CNPJ..." value={clientSearchText} onChange={e=>{setClientSearchText(e.target.value); setShowClientDropdown(true);}} onFocus={()=>setShowClientDropdown(true)} className={fieldClass} /><Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" /></div>
+                 <div className="relative"><input type="text" placeholder="Nome, CNPJ ou código..." value={clientSearchText} onChange={e=>{setClientSearchText(e.target.value); setShowClientDropdown(true);}} onFocus={()=>setShowClientDropdown(true)} className={fieldClass} /><Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" /></div>
                  {showClientDropdown && filteredClients.length > 0 && (
                    <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 shadow-xl rounded-xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200">
                      {filteredClients.map(c=>(<div key={c.id} onClick={()=>{
@@ -2059,7 +2059,7 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
                        const targetIcmsDestino = fixedIcms || getAutoIcms(c.address || '', '0', null);
                        setCurrentProposal(p=>({...p, clientId: c.id, config: { ...p.config, contato: c.contact || 'A/C Comercial', icmsDestino: targetIcmsDestino }, items: p.items.map(i => { const isSpec = SPECIAL_ICMS_PRODUCTS.includes(String(i.productId)); const finalIcms = isSpec ? getAutoIcms(c.address || '', i.codOrigem || '0', i.productId) : (fixedIcms || getAutoIcms(c.address || '', i.codOrigem || '0', i.productId)); return { ...i, icms: finalIcms }; })}));
                        setClientSearchText(c.company||c.nome); setShowClientDropdown(false); showToast(fixedIcms ? `ICMS fixo do cliente (${fixedIcms}) aplicado!` : `ICMS recalculado automaticamente!`);
-                     }} className="p-3 border-b border-slate-50 hover:bg-blue-50 cursor-pointer touch-manipulation"><div className="font-bold text-sm text-slate-800">{c.company||c.nome}</div><div className="text-[10px] text-slate-500 mt-1">{formatCNPJ(c.document||c.cnpj)}</div></div>))}
+                     }} className="p-3 border-b border-slate-50 hover:bg-blue-50 cursor-pointer touch-manipulation"><div className="flex justify-between items-baseline gap-2"><div className="font-bold text-sm text-slate-800">{c.company||c.nome}</div><div className="text-[10px] text-slate-400 font-bold shrink-0">#{c.id}</div></div><div className="text-[10px] text-slate-500 mt-1">{formatCNPJ(c.document||c.cnpj)}</div></div>))}
                    </div>
                  )}
                </div>
