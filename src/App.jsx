@@ -1775,8 +1775,10 @@ function CatalogView({ clients, products, currentProposal, setCurrentProposal, s
       const nextNum = ((prev.items.length + 1) * 10).toString();
       const client = clients.find(c => c.id === prev.clientId);
       const isSpec = SPECIAL_ICMS_PRODUCTS.includes(String(addModalProd.id));
+      const prodHasZeroIcms = String(addModalProd.icms || '').replace('%','').trim() === '0';
       let targetIcms = '18%';
-      if (prev.clientId) {
+      if (prodHasZeroIcms) { targetIcms = '0%'; }
+      else if (prev.clientId) {
          const clientFixedIcms = client?.icms ? (String(client.icms).includes('%') ? client.icms : `${client.icms}%`) : null;
          targetIcms = isSpec ? getAutoIcms(client?.address, addModalProd.codOrigem || '0', addModalProd.id) : (clientFixedIcms || getAutoIcms(client?.address, addModalProd.codOrigem || '0', addModalProd.id));
       } else {
@@ -1932,8 +1934,10 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
     if (!prod) return;
     const client = clients.find(c => c.id === currentProposal.clientId);
     const isSpec = SPECIAL_ICMS_PRODUCTS.includes(String(prod.id));
+    const prodZeroIcms = String(prod.icms || '').replace('%','').trim() === '0';
     let autoIcms = '18%';
-    if (currentProposal.clientId) {
+    if (prodZeroIcms) { autoIcms = '0%'; }
+    else if (currentProposal.clientId) {
        const clientFixedIcms = client?.icms ? (String(client.icms).includes('%') ? client.icms : `${client.icms}%`) : null;
        autoIcms = isSpec ? getAutoIcms(client?.address, prod.codOrigem || '0', prod.id) : (clientFixedIcms || getAutoIcms(client?.address, prod.codOrigem || '0', prod.id));
     } else { autoIcms = isSpec ? '18%' : (cfg.icmsDestino || '18%'); }
@@ -2085,7 +2089,7 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
                      {filteredClients.map(c=>(<div key={c.id} onClick={()=>{
                        const fixedIcms = c.icms !== undefined && c.icms !== null && c.icms !== '' ? (String(c.icms).includes('%') ? String(c.icms) : `${c.icms}%`) : null;
                        const targetIcmsDestino = fixedIcms || getAutoIcms(c.address || '', '0', null);
-                       setCurrentProposal(p=>({...p, clientId: c.id, config: { ...p.config, contato: c.contact || 'A/C Comercial', icmsDestino: targetIcmsDestino }, items: p.items.map(i => { const isSpec = SPECIAL_ICMS_PRODUCTS.includes(String(i.productId)); const finalIcms = isSpec ? getAutoIcms(c.address || '', i.codOrigem || '0', i.productId) : (fixedIcms || getAutoIcms(c.address || '', i.codOrigem || '0', i.productId)); return { ...i, icms: finalIcms }; })}));
+                       setCurrentProposal(p=>({...p, clientId: c.id, config: { ...p.config, contato: c.contact || 'A/C Comercial', icmsDestino: targetIcmsDestino }, items: p.items.map(i => { const isSpec = SPECIAL_ICMS_PRODUCTS.includes(String(i.productId)); const itemHasZeroIcms = String(i.icms || '').replace('%','').trim() === '0'; if (itemHasZeroIcms) return i; const finalIcms = isSpec ? getAutoIcms(c.address || '', i.codOrigem || '0', i.productId) : (fixedIcms || getAutoIcms(c.address || '', i.codOrigem || '0', i.productId)); return { ...i, icms: finalIcms }; })}));
                        setClientSearchText(c.company||c.nome); setShowClientDropdown(false); showToast(fixedIcms ? `ICMS fixo do cliente (${fixedIcms}) aplicado!` : `ICMS recalculado automaticamente!`);
                      }} className="p-3 border-b border-slate-50 hover:bg-blue-50 cursor-pointer touch-manipulation"><div className="flex justify-between items-baseline gap-2"><div className="font-bold text-sm text-slate-800">{c.company||c.nome}</div><div className="text-[10px] text-slate-400 font-bold shrink-0">#{c.id}</div></div><div className="text-[10px] text-slate-500 mt-1">{formatCNPJ(c.document||c.cnpj)}</div></div>))}
                    </div>
