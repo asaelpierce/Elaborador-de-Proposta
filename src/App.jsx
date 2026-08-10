@@ -998,7 +998,7 @@ export default function App() {
             {activeTab === 'management' && <ManagementView proposals={proposals} clients={clients} updateStatus={async (id, s) => { await supabaseRequest('proposals', 'PATCH', {id, status: s}); refreshData();}} loadProposalForEditing={(p) => {setCurrentProposal(p); setActiveTab('builder');}} deleteProposal={deleteProposal} />}
             {activeTab === 'estoque' && <EstoqueView products={products} estoque={estoque} showToast={showToast} refreshData={refreshData} />}
             {activeTab === 'fisp' && <FispView fispList={fispList} showToast={showToast} refreshData={refreshData} />}
-            {activeTab === 'simulator' && <SimulatorView showToast={showToast} refreshData={refreshData} />}
+            {activeTab === 'simulator' && <SimulatorView showToast={showToast} refreshData={refreshData} products={products} />}
             {activeTab === 'technicalSheet' && <TechnicalSheetView products={products} customLogo={customLogo} showToast={showToast} initialSelectedId={selectedTechSheetId} />}
             {activeTab === 'settings' && <SettingsView showToast={showToast} setCustomLogo={setCustomLogo} currentLogo={customLogo} refreshData={refreshData} openAIApiKey={openAIApiKey} setOpenAIApiKey={setOpenAIApiKey} />}
           </div>
@@ -2299,7 +2299,7 @@ function ManagementView({ proposals, clients, updateStatus, loadProposalForEditi
 // ==========================================
 // SIMULADOR 3D
 // ==========================================
-function SimulatorView({ showToast, refreshData }) {
+function SimulatorView({ showToast, refreshData, products = [] }) {
     const [currentKey, setCurrentKey] = useState('WPHSKRX-774');
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [isInfoOpen, setInfoOpen] = useState(window.innerWidth >= 768);
@@ -2308,6 +2308,12 @@ function SimulatorView({ showToast, refreshData }) {
     const [isAutoRotate, setAutoRotate] = useState(false);
     const [isPanMode, setPanMode] = useState(false);
     const [isCapturing, setIsCapturing] = useState(false);
+    const [isCaptureModalOpen, setIsCaptureModalOpen] = useState(false);
+    const [targetProductId, setTargetProductId] = useState('');
+    const [productSearch, setProductSearch] = useState('');
+    const [simProductMap, setSimProductMap] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('kbn_sim_product_map') || '{}'); } catch (e) { return {}; }
+    });
     const canvasRef = useRef(null);
     const labelsRef = useRef(null);
     const sceneManager = useRef(null);
@@ -2325,16 +2331,53 @@ function SimulatorView({ showToast, refreshData }) {
     useEffect(() => { if (sceneManager.current) sceneManager.current.setAutoRotate(isAutoRotate); }, [isAutoRotate]);
     useEffect(() => { if (sceneManager.current) sceneManager.current.setPanMode(isPanMode); }, [isPanMode]);
 
-    const handleCaptureForFicha = async () => {
-        if (!sceneManager.current || !activeProject?.id) return;
+    const filteredProducts = useMemo(() => {
+        if (!productSearch) return products;
+        const lower = productSearch.toLowerCase();
+        return products.filter(p =>
+            (p.name && p.name.toLowerCase().includes(lower)) ||
+            (p.codkalenborn && p.codkalenborn.toLowerCase().includes(lower)) ||
+            (p.codvale && String(p.codvale).toLowerCase().includes(lower)) ||
+            (p.id && String(p.id).toLowerCase().includes(lower))
+        );
+    }, [products, productSearch]);
+
+    const handleConfirmCapture = async () => {
+        if (!sceneManager.current || !targetProductId) return;
         setIsCapturing(true);
         try {
             const dataUrl = sceneManager.current.exportImage();
             const blob = await (await fetch(dataUrl)).blob();
-            const fileName = `produtos/${activeProject.id}_3d_${Date.now()}.png`;
+            const fileName = `produtos/${targetProductId}_3d_${Date.now()}.png`;
             const url = await supabaseUpload('portal-files', fileName, blob);
-            await supabaseRequest('products', 'POST', { id: activeProject.id, imagem_url: url }, true);
-            showToast?.(`✅ Imagem 3D salva na Ficha Técnica de ${activeProject.id}!`);
+            await supabaseRequest('products', 'POST', { id: targetProductId, imagem_url: url }, true);
+            const nextMap = { ...simProductMap, [currentKey]: targetProductId };
+            setSimProductMap(nextMap);
+            localStorage.setItem('kbn_sim_product_map', JSON.stringify(nextMap));
+            showToast?.(`✅ Imagem 3D salva na Ficha Técnica do produto ${targetProductId}!`);
+            refreshData?.();
+            setIsCaptureModalOpen(false);
+            setTargetProductId('');
+        } catch (err) {
+            showToast?.('Erro ao capturar/salvar imagem.');
+        } finally {
+            setIsCapturing(false);
+        }
+    };
+
+    const handleQuickCapture = async () => {
+        const linkedId = simProductMap[currentKey];
+        const stillExists = products.some(p => String(p.id) === String(linkedId));
+        if (!linkedId || !stillExists) { setIsCaptureModalOpen(true); return; }
+        if (!sceneManager.current) return;
+        setIsCapturing(true);
+        try {
+            const dataUrl = sceneManager.current.exportImage();
+            const blob = await (await fetch(dataUrl)).blob();
+            const fileName = `produtos/${linkedId}_3d_${Date.now()}.png`;
+            const url = await supabaseUpload('portal-files', fileName, blob);
+            await supabaseRequest('products', 'POST', { id: linkedId, imagem_url: url }, true);
+            showToast?.(`✅ Imagem 3D atualizada na Ficha Técnica do produto ${linkedId}!`);
             refreshData?.();
         } catch (err) {
             showToast?.('Erro ao capturar/salvar imagem.');
@@ -2353,12 +2396,22 @@ function SimulatorView({ showToast, refreshData }) {
                     </select>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto justify-center">
-                    <button onClick={handleCaptureForFicha} disabled={isCapturing} className="flex-1 sm:flex-none px-4 py-3 rounded-xl border transition-all shadow-md cursor-pointer bg-emerald-600 text-white font-bold text-xs uppercase flex items-center gap-2 disabled:opacity-60" title="Capturar imagem atual e salvar na Ficha Técnica deste produto">{isCapturing ? <RefreshCw size={16} className="animate-spin"/> : <Camera size={16}/>} Usar na Ficha Técnica</button>
+                    <div className="flex-1 sm:flex-none flex rounded-xl shadow-md overflow-hidden">
+                        <button onClick={handleQuickCapture} disabled={isCapturing} className="px-4 py-3 transition-all cursor-pointer bg-emerald-600 text-white font-bold text-xs uppercase flex items-center gap-2 disabled:opacity-60" title={simProductMap[currentKey] ? `Capturar e salvar direto no produto ${simProductMap[currentKey]}` : 'Capturar imagem e vincular a um produto'}>
+                            {isCapturing ? <RefreshCw size={16} className="animate-spin"/> : <Camera size={16}/>} Usar na Ficha Técnica
+                        </button>
+                        <button onClick={() => setIsCaptureModalOpen(true)} className="px-2.5 border-l border-emerald-500 bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer flex items-center justify-center" title="Trocar produto vinculado" onMouseDown={() => setTargetProductId(simProductMap[currentKey] || '')}><ChevronDown size={14}/></button>
+                    </div>
                     <button onClick={() => setWireframe(!isWireframe)} className={`flex-1 sm:flex-none p-3 rounded-xl border transition-all shadow-md cursor-pointer ${isWireframe ? 'bg-sky-600 text-white' : 'bg-white text-slate-600'}`}><Grid size={18}/></button>
                     <button onClick={() => setAssembled(!isAssembled)} className={`flex-1 sm:flex-none p-3 rounded-xl border transition-all shadow-md active:scale-95 touch-manipulation cursor-pointer ${!isAssembled ? 'bg-orange-600 text-white' : 'bg-white text-slate-600'}`} title="Desmontar"><Wrench size={18}/></button>
                     <button onClick={() => setAutoRotate(!isAutoRotate)} className={`flex-1 sm:flex-none p-3 rounded-xl border transition-all shadow-md cursor-pointer ${isAutoRotate ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600'}`}><RefreshCw size={18} className={isAutoRotate ? 'animate-spin' : ''}/></button>
                 </div>
             </header>
+            {simProductMap[currentKey] && (
+                <div className="absolute top-[76px] left-4 z-30 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-sm">
+                    Vinculado ao produto {simProductMap[currentKey]}
+                </div>
+            )}
             <div ref={canvasRef} className="flex-1 w-full h-full cursor-grab active:cursor-grabbing z-10" />
             <div ref={labelsRef} className="absolute inset-0 pointer-events-none z-20" />
             <div className="absolute bottom-6 left-6 right-6 lg:left-auto lg:w-80 bg-white/95 backdrop-blur border border-slate-200 p-5 rounded-2xl shadow-2xl z-30">
@@ -2372,6 +2425,36 @@ function SimulatorView({ showToast, refreshData }) {
                     </div>
                 </div>
             </div>
+
+            {isCaptureModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-200">
+                        <div className="bg-emerald-600 p-4 text-white flex justify-between items-center">
+                            <h3 className="font-black flex items-center gap-2"><Camera size={18}/> Salvar imagem na Ficha Técnica</h3>
+                            <button onClick={() => { setIsCaptureModalOpen(false); setTargetProductId(''); }} className="text-emerald-200 hover:text-white cursor-pointer"><X size={20}/></button>
+                        </div>
+                        <div className="p-5 space-y-3">
+                            <p className="text-xs text-slate-500">Escolha qual produto cadastrado vai receber esta imagem capturada do simulador.</p>
+                            <input type="text" placeholder="Buscar produto (nome, Cód KBN, Cód Vale)..." value={productSearch} onChange={e => setProductSearch(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm outline-none focus:border-emerald-500" />
+                            <div className="max-h-64 overflow-y-auto custom-scrollbar border border-slate-100 rounded-lg divide-y">
+                                {filteredProducts.map(p => (
+                                    <button key={p.id} onClick={() => setTargetProductId(p.id)} className={`w-full text-left p-3 transition-colors cursor-pointer ${targetProductId === p.id ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
+                                        <div className="font-bold text-xs line-clamp-1">{p.codkalenborn || p.name}</div>
+                                        <div className="text-[10px] text-slate-400 mt-0.5">KBN: {p.id} {p.codvale ? `| Vale: ${p.codvale}` : ''}</div>
+                                    </button>
+                                ))}
+                                {filteredProducts.length === 0 && <div className="text-center p-4 text-xs text-slate-400">Nenhum produto encontrado.</div>}
+                            </div>
+                        </div>
+                        <div className="p-4 bg-slate-50 flex gap-3 border-t">
+                            <button onClick={() => { setIsCaptureModalOpen(false); setTargetProductId(''); }} className="flex-1 py-3 font-bold text-slate-600 bg-white border rounded-xl cursor-pointer hover:bg-slate-100">Cancelar</button>
+                            <button onClick={handleConfirmCapture} disabled={!targetProductId || isCapturing} className="flex-1 py-3 font-black bg-emerald-600 text-white rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-700 disabled:opacity-50">
+                                {isCapturing ? <RefreshCw size={16} className="animate-spin"/> : <Save size={16}/>} Salvar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
