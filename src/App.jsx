@@ -1035,7 +1035,7 @@ function EstoqueView({ products, estoque, showToast, refreshData }) {
   const [estoqueForm, setEstoqueForm] = useState({ product_id: '', quantidade: '', localizacao: '', lote: '', data_entrada: new Date().toISOString().split('T')[0], observacao: '' });
 
   // Form: novo produto
-  const emptyProduct = { id: '', codkalenborn: '', name: '', um: 'KG', price: '', ncm: '', icms: '18%', ipi: '0', piscofins: '9.25', codorigem: '0', entrega: '', codvale: '', category: '', descricao_original: '', caracteristica: '' };
+  const emptyProduct = { id: '', codkalenborn: '', name: '', um: 'KG', price: '', ncm: '', icms: '18%', ipi: '0', piscofins: '9.25', codorigem: '0', entrega: '', codvale: '', category: '', descricao_original: '', caracteristica: '', imagem_url: '', garantia: '', composicao_quimica: [], propriedades_material: [] };
   const [productForm, setProductForm] = useState(emptyProduct);
 
   // Form: editar preço
@@ -1278,8 +1278,9 @@ function EstoqueView({ products, estoque, showToast, refreshData }) {
                           <span className="text-[10px] font-black text-slate-300 uppercase">Sem Registro</span>
                         )}
                       </td>
-                      <td className="p-4 text-center">
-                        <button onClick={() => { setPriceForm({ id: prod.id, price: prod.price || '' }); setModalMode('edit_price'); }} className="w-8 h-8 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-500 hover:text-white transition-all cursor-pointer flex items-center justify-center mx-auto" title="Alterar Preço"><DollarSign size={14}/></button>
+                      <td className="p-4 text-center flex items-center justify-center gap-1.5">
+                        <button onClick={() => { setPriceForm({ id: prod.id, price: prod.price || '' }); setModalMode('edit_price'); }} className="w-8 h-8 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-500 hover:text-white transition-all cursor-pointer flex items-center justify-center" title="Alterar Preço"><DollarSign size={14}/></button>
+                        <button onClick={() => { setProductForm({ ...emptyProduct, ...prod, composicao_quimica: Array.isArray(prod.composicao_quimica) ? prod.composicao_quimica : [], propriedades_material: Array.isArray(prod.propriedades_material) ? prod.propriedades_material : [] }); setModalMode('add_produto'); }} className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all cursor-pointer flex items-center justify-center" title="Editar Produto / Ficha Técnica"><Edit size={14}/></button>
                       </td>
                     </tr>
                   );
@@ -1384,6 +1385,57 @@ function EstoqueView({ products, estoque, showToast, refreshData }) {
                 <label className={labelClass}>Característica Técnica (para Ficha Técnica)</label>
                 <textarea rows="2" value={productForm.caracteristica} onChange={e => setProductForm(f => ({...f, caracteristica: e.target.value}))} className={`${fieldClass} resize-none`} />
               </div>
+
+              <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                <label className={labelClass}>Imagem / Render 3D (Ficha Técnica)</label>
+                <div className="flex items-center gap-4">
+                  {productForm.imagem_url ? (
+                    <img src={productForm.imagem_url} alt="preview" className="w-20 h-20 object-contain rounded-lg border bg-white" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-300"><Box size={24}/></div>
+                  )}
+                  <label className="flex-1 flex items-center justify-center gap-2 bg-white border border-slate-200 rounded-lg py-2.5 text-xs font-bold text-slate-600 hover:border-blue-400 hover:text-blue-600 cursor-pointer transition-all">
+                    <Upload size={14}/> {productForm.imagem_url ? 'Trocar imagem' : 'Enviar imagem/render'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const fileName = `produtos/${productForm.id || 'novo'}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+                          const url = await supabaseUpload('portal-files', fileName, file);
+                          setProductForm(f => ({ ...f, imagem_url: url }));
+                          showToast('✅ Imagem enviada!');
+                        } catch (err) { showToast('Erro ao enviar imagem.'); }
+                      }}
+                    />
+                  </label>
+                  {productForm.imagem_url && (
+                    <button type="button" onClick={() => setProductForm(f => ({...f, imagem_url: ''}))} className="w-9 h-9 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white flex items-center justify-center cursor-pointer" title="Remover imagem"><Trash2 size={14}/></button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>Garantia</label>
+                <input type="text" value={productForm.garantia} onChange={e => setProductForm(f => ({...f, garantia: e.target.value}))} placeholder="Ex: 12 meses a partir da emissão da NF" className={fieldClass} />
+              </div>
+
+              <TableEditor
+                label="Composição Química (Ficha Técnica)"
+                rows={productForm.composicao_quimica}
+                columns={[{ key: 'item', placeholder: 'Ex: Al2O3' }, { key: 'unidade', placeholder: '%' }, { key: 'valor', placeholder: '92,05' }]}
+                onChange={rows => setProductForm(f => ({ ...f, composicao_quimica: rows }))}
+              />
+
+              <TableEditor
+                label="Propriedades do Material (Ficha Técnica)"
+                rows={productForm.propriedades_material}
+                columns={[{ key: 'caracteristica', placeholder: 'Ex: Densidade' }, { key: 'unidade', placeholder: 'g/cm³' }, { key: 'valor', placeholder: '3,6 - 3,65' }]}
+                onChange={rows => setProductForm(f => ({ ...f, propriedades_material: rows }))}
+              />
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
@@ -2306,6 +2358,49 @@ function SimulatorView() {
 // ==========================================
 // FICHA TÉCNICA
 // ==========================================
+// ==========================================
+// EDITOR DE TABELA DINÂMICA (Composição / Propriedades)
+// ==========================================
+function TableEditor({ label, rows, columns, onChange }) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const updateRow = (idx, key, value) => {
+    const next = safeRows.map((r, i) => i === idx ? { ...r, [key]: value } : r);
+    onChange(next);
+  };
+  const addRow = () => {
+    const blank = {}; columns.forEach(c => blank[c.key] = '');
+    onChange([...safeRows, blank]);
+  };
+  const removeRow = (idx) => onChange(safeRows.filter((_, i) => i !== idx));
+
+  return (
+    <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 bg-slate-50/50">
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</label>
+        <button type="button" onClick={addRow} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"><Plus size={12}/> Adicionar linha</button>
+      </div>
+      {safeRows.length === 0 && <div className="text-[11px] text-slate-400 italic py-2">Nenhum item adicionado.</div>}
+      <div className="space-y-2">
+        {safeRows.map((row, idx) => (
+          <div key={idx} className="flex items-center gap-2">
+            {columns.map(col => (
+              <input
+                key={col.key}
+                type="text"
+                value={row[col.key] || ''}
+                placeholder={col.placeholder}
+                onChange={e => updateRow(idx, col.key, e.target.value)}
+                className="flex-1 px-2.5 py-2 rounded-lg border border-slate-200 text-xs focus:border-blue-500 outline-none bg-white"
+              />
+            ))}
+            <button type="button" onClick={() => removeRow(idx)} className="w-8 h-8 shrink-0 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white flex items-center justify-center cursor-pointer"><Trash2 size={13}/></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedId, setSelectedId] = useState(initialSelectedId || '');
@@ -2349,22 +2444,92 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
 
   const renderFicha = () => {
     if (!selectedProduct) return null;
+    const composicao = Array.isArray(selectedProduct.composicao_quimica) ? selectedProduct.composicao_quimica : [];
+    const propriedades = Array.isArray(selectedProduct.propriedades_material) ? selectedProduct.propriedades_material : [];
     return (
-      <div style={{ fontFamily: 'Arial, sans-serif', color: '#000' }}>
-        <header className="flex justify-between items-center mb-8 border-b-2 border-black pb-4"><img src={customLogo || defaultLogoBase64} alt="Logo" className="h-16 object-contain" /><div className="text-right"><h2 className="text-xl font-black text-[#14325a]">FICHA TÉCNICA</h2><div className="text-sm font-bold text-gray-500">PRODUTOS KALENBORN</div></div></header>
-        <div className="text-center font-black text-xl uppercase mb-8 p-4 bg-gray-100 border border-black rounded-sm">{selectedProduct.name || selectedProduct.id}</div>
-        <div className="space-y-6">
-          <div><h3 className="font-bold text-sm uppercase bg-black text-white px-3 py-1 inline-block mb-2">Descrição / Característica</h3><div className="p-4 border border-black min-h-[100px] text-sm leading-relaxed text-justify uppercase font-bold whitespace-pre-wrap">{selectedProduct.caracteristica || selectedProduct.descricao_original || selectedProduct.codKalenborn || 'Sem descrição detalhada'}</div></div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><h3 className="font-bold text-sm uppercase bg-black text-white px-3 py-1 inline-block mb-2">Part Number / Cód Vale</h3><div className="p-4 border border-black text-lg font-black text-center">{selectedProduct.codvale || 'N/A'}</div></div>
-            <div><h3 className="font-bold text-sm uppercase bg-black text-white px-3 py-1 inline-block mb-2">Cód Kalenborn (KBN)</h3><div className="p-4 border border-black text-lg font-black text-center text-gray-600">{selectedProduct.id}</div></div>
+      <div style={{ fontFamily: 'Arial, sans-serif', color: '#000', fontSize: '11px' }}>
+        <header className="flex justify-between items-center mb-6 border-b-2 border-black pb-3">
+          <img src={customLogo || defaultLogoBase64} alt="Logo" className="h-14 object-contain" />
+          <div className="text-right"><h2 className="text-lg font-black text-[#14325a]">FICHA TÉCNICA</h2><div className="text-[10px] font-bold text-gray-500">TÍTULO: {(selectedProduct.name || selectedProduct.codkalenborn || selectedProduct.id || '').toUpperCase()}</div></div>
+        </header>
+
+        <div className="grid grid-cols-2 gap-6 mb-6">
+          <div>
+            <div className="w-full h-56 border border-black rounded-sm flex items-center justify-center overflow-hidden bg-white">
+              {selectedProduct.imagem_url ? (
+                <img src={selectedProduct.imagem_url} alt={selectedProduct.name} className="max-w-full max-h-full object-contain" />
+              ) : (
+                <span className="text-gray-300 text-xs italic">Sem imagem cadastrada</span>
+              )}
+            </div>
+            <h3 className="font-bold text-[11px] uppercase mt-4 mb-1">Descrição:</h3>
+            <div className="text-[10px] leading-relaxed text-justify whitespace-pre-wrap">{selectedProduct.descricao_original || 'Sem descrição detalhada.'}</div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><h3 className="font-bold text-sm uppercase bg-black text-white px-3 py-1 inline-block mb-2">NCM</h3><div className="p-3 border border-black text-center font-bold">{selectedProduct.ncm || 'Consultar'}</div></div>
-            <div><h3 className="font-bold text-sm uppercase bg-black text-white px-3 py-1 inline-block mb-2">Unidade de Medida</h3><div className="p-3 border border-black text-center font-bold">{selectedProduct.um || 'UN'}</div></div>
+
+          <div>
+            <h3 className="font-bold text-[11px] uppercase mb-1">Características:</h3>
+            <div className="text-[10px] leading-relaxed text-justify whitespace-pre-wrap mb-3">{selectedProduct.caracteristica || 'Sem característica cadastrada.'}</div>
+
+            {composicao.length > 0 && (
+              <>
+                <h3 className="font-bold text-[11px] uppercase mb-1 mt-3">Especificações Técnicas:</h3>
+                <table className="w-full border-collapse text-[10px]">
+                  <thead>
+                    <tr className="bg-gray-200">
+                      <th className="border border-black px-2 py-1 text-left">Item</th>
+                      <th className="border border-black px-2 py-1">Unid.</th>
+                      <th className="border border-black px-2 py-1">Resultado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {composicao.map((row, i) => (
+                      <tr key={i}>
+                        <td className="border border-black px-2 py-1">{row.item}</td>
+                        <td className="border border-black px-2 py-1 text-center">{row.unidade}</td>
+                        <td className="border border-black px-2 py-1 text-center font-bold">{row.valor}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
           </div>
         </div>
-        <footer className="mt-20 pt-4 border-t-2 border-black text-[10px] text-center font-bold"><div>KALENBORN DO BRASIL LTDA | Estrada Antiga BH - Pedro Leopoldo, 1150 Galpão 03 - Vespasiano / MG</div><div>Tel.: +55 31 3499-4000 | comercial@kalenborn.com.br | www.kalenborn.com.br</div></footer>
+
+        {propriedades.length > 0 && (
+          <div className="mb-6">
+            <h3 className="font-bold text-[11px] uppercase mb-1">Propriedades do Produto:</h3>
+            <table className="w-full border-collapse text-[10px]">
+              <thead>
+                <tr className="bg-gray-200">
+                  <th className="border border-black px-2 py-1 text-left w-1/2">Característica</th>
+                  <th className="border border-black px-2 py-1">Unidade</th>
+                  <th className="border border-black px-2 py-1">Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {propriedades.map((row, i) => (
+                  <tr key={i}>
+                    <td className="border border-black px-2 py-1">{row.caracteristica}</td>
+                    <td className="border border-black px-2 py-1 text-center">{row.unidade}</td>
+                    <td className="border border-black px-2 py-1 text-center font-bold">{row.valor}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3 text-[10px] mb-2">
+          <div><span className="font-bold">Garantia:</span> {selectedProduct.garantia || '—'}</div>
+          <div><span className="font-bold">Part Number / Cód Vale:</span> {selectedProduct.codvale || 'N/A'}</div>
+          <div><span className="font-bold">NCM:</span> {selectedProduct.ncm || 'Consultar'}</div>
+          <div><span className="font-bold">IPI:</span> {selectedProduct.ipi || '0'}%</div>
+          <div><span className="font-bold">Cód Kalenborn (KBN):</span> {selectedProduct.id}</div>
+          <div><span className="font-bold">Unidade de Medida:</span> {selectedProduct.um || 'UN'}</div>
+        </div>
+
+        <footer className="mt-10 pt-3 border-t-2 border-black text-[9px] text-center font-bold"><div>KALENBORN DO BRASIL LTDA | Estrada Antiga BH - Pedro Leopoldo, 1150 Galpão 03 - Vespasiano / MG</div><div>Tel.: +55 31 3499-4000 | comercial@kalenborn.com.br | www.kalenborn.com.br</div></footer>
       </div>
     );
   };
