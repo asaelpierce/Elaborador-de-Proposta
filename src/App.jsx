@@ -998,7 +998,7 @@ export default function App() {
             {activeTab === 'management' && <ManagementView proposals={proposals} clients={clients} updateStatus={async (id, s) => { await supabaseRequest('proposals', 'PATCH', {id, status: s}); refreshData();}} loadProposalForEditing={(p) => {setCurrentProposal(p); setActiveTab('builder');}} deleteProposal={deleteProposal} />}
             {activeTab === 'estoque' && <EstoqueView products={products} estoque={estoque} showToast={showToast} refreshData={refreshData} />}
             {activeTab === 'fisp' && <FispView fispList={fispList} showToast={showToast} refreshData={refreshData} />}
-            {activeTab === 'simulator' && <SimulatorView />}
+            {activeTab === 'simulator' && <SimulatorView showToast={showToast} refreshData={refreshData} />}
             {activeTab === 'technicalSheet' && <TechnicalSheetView products={products} customLogo={customLogo} showToast={showToast} initialSelectedId={selectedTechSheetId} />}
             {activeTab === 'settings' && <SettingsView showToast={showToast} setCustomLogo={setCustomLogo} currentLogo={customLogo} refreshData={refreshData} openAIApiKey={openAIApiKey} setOpenAIApiKey={setOpenAIApiKey} />}
           </div>
@@ -2299,7 +2299,7 @@ function ManagementView({ proposals, clients, updateStatus, loadProposalForEditi
 // ==========================================
 // SIMULADOR 3D
 // ==========================================
-function SimulatorView() {
+function SimulatorView({ showToast, refreshData }) {
     const [currentKey, setCurrentKey] = useState('WPHSKRX-774');
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [isInfoOpen, setInfoOpen] = useState(window.innerWidth >= 768);
@@ -2307,6 +2307,7 @@ function SimulatorView() {
     const [isAssembled, setAssembled] = useState(true);
     const [isAutoRotate, setAutoRotate] = useState(false);
     const [isPanMode, setPanMode] = useState(false);
+    const [isCapturing, setIsCapturing] = useState(false);
     const canvasRef = useRef(null);
     const labelsRef = useRef(null);
     const sceneManager = useRef(null);
@@ -2323,6 +2324,25 @@ function SimulatorView() {
     useEffect(() => { if (sceneManager.current) sceneManager.current.setAssembled(isAssembled); }, [isAssembled]);
     useEffect(() => { if (sceneManager.current) sceneManager.current.setAutoRotate(isAutoRotate); }, [isAutoRotate]);
     useEffect(() => { if (sceneManager.current) sceneManager.current.setPanMode(isPanMode); }, [isPanMode]);
+
+    const handleCaptureForFicha = async () => {
+        if (!sceneManager.current || !activeProject?.id) return;
+        setIsCapturing(true);
+        try {
+            const dataUrl = sceneManager.current.exportImage();
+            const blob = await (await fetch(dataUrl)).blob();
+            const fileName = `produtos/${activeProject.id}_3d_${Date.now()}.png`;
+            const url = await supabaseUpload('portal-files', fileName, blob);
+            await supabaseRequest('products', 'POST', { id: activeProject.id, imagem_url: url }, true);
+            showToast?.(`✅ Imagem 3D salva na Ficha Técnica de ${activeProject.id}!`);
+            refreshData?.();
+        } catch (err) {
+            showToast?.('Erro ao capturar/salvar imagem.');
+        } finally {
+            setIsCapturing(false);
+        }
+    };
+
     return (
         <div className="flex flex-col h-full bg-slate-100 relative overflow-hidden font-sans">
             <header className="p-4 bg-white border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center shrink-0 gap-4 shadow-sm z-30">
@@ -2333,6 +2353,7 @@ function SimulatorView() {
                     </select>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto justify-center">
+                    <button onClick={handleCaptureForFicha} disabled={isCapturing} className="flex-1 sm:flex-none px-4 py-3 rounded-xl border transition-all shadow-md cursor-pointer bg-emerald-600 text-white font-bold text-xs uppercase flex items-center gap-2 disabled:opacity-60" title="Capturar imagem atual e salvar na Ficha Técnica deste produto">{isCapturing ? <RefreshCw size={16} className="animate-spin"/> : <Camera size={16}/>} Usar na Ficha Técnica</button>
                     <button onClick={() => setWireframe(!isWireframe)} className={`flex-1 sm:flex-none p-3 rounded-xl border transition-all shadow-md cursor-pointer ${isWireframe ? 'bg-sky-600 text-white' : 'bg-white text-slate-600'}`}><Grid size={18}/></button>
                     <button onClick={() => setAssembled(!isAssembled)} className={`flex-1 sm:flex-none p-3 rounded-xl border transition-all shadow-md active:scale-95 touch-manipulation cursor-pointer ${!isAssembled ? 'bg-orange-600 text-white' : 'bg-white text-slate-600'}`} title="Desmontar"><Wrench size={18}/></button>
                     <button onClick={() => setAutoRotate(!isAutoRotate)} className={`flex-1 sm:flex-none p-3 rounded-xl border transition-all shadow-md cursor-pointer ${isAutoRotate ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600'}`}><RefreshCw size={18} className={isAutoRotate ? 'animate-spin' : ''}/></button>
