@@ -8,7 +8,7 @@ import {
   Handshake, Clock, FileWarning, Key, Box, Camera, Ruler, 
   Info, Grid, Wrench, Video, Layers, Minimize2, Maximize2, 
   RefreshCw, Move, ChevronLeft, ChevronRight, Edit, ChevronDown,
-  Package, Archive, DollarSign, ShieldAlert, Upload, Eye
+  Package, Archive, DollarSign, ShieldAlert, Upload, Eye, Mic, MicOff
 } from 'lucide-react';
 
 const SUPABASE_URL = "https://iwpsxftmwbsvjdktlidk.supabase.co/";
@@ -969,6 +969,7 @@ export default function App() {
           <NavItem icon={ShieldAlert} label="FISP" active={activeTab === 'fisp'} onClick={() => { setActiveTab('fisp'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
           <NavItem icon={Box} label="Bandejas 3D" active={activeTab === 'simulator'} onClick={() => { setActiveTab('simulator'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
           <NavItem icon={Layers} label="Ficha Técnica" active={activeTab === 'technicalSheet'} onClick={() => { setActiveTab('technicalSheet'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
+          <NavItem icon={Mic} label="Estudo de Caso" active={activeTab === 'caseStudy'} onClick={() => { setActiveTab('caseStudy'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
         </nav>
         <div className="p-4 border-t border-white/5 bg-[#0B1120]/50 space-y-3 shrink-0">
           <NavItem icon={Settings} label="Configurações" active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
@@ -1000,6 +1001,7 @@ export default function App() {
             {activeTab === 'fisp' && <FispView fispList={fispList} showToast={showToast} refreshData={refreshData} />}
             {activeTab === 'simulator' && <SimulatorView showToast={showToast} refreshData={refreshData} products={products} />}
             {activeTab === 'technicalSheet' && <TechnicalSheetView products={products} customLogo={customLogo} showToast={showToast} initialSelectedId={selectedTechSheetId} />}
+            {activeTab === 'caseStudy' && <CaseStudyView customLogo={customLogo} showToast={showToast} />}
             {activeTab === 'settings' && <SettingsView showToast={showToast} setCustomLogo={setCustomLogo} currentLogo={customLogo} refreshData={refreshData} openAIApiKey={openAIApiKey} setOpenAIApiKey={setOpenAIApiKey} />}
           </div>
         )}
@@ -2906,6 +2908,321 @@ function SettingsView({ showToast, setCustomLogo, currentLogo, refreshData, open
        <h1 className="text-3xl font-black text-slate-800 uppercase tracking-widest border-b pb-4">Ajustes do Sistema</h1>
        <div className="bg-purple-50 p-6 sm:p-8 rounded-[2rem] border border-purple-200 shadow-sm mb-6"><h2 className="text-lg font-black mb-2 text-purple-900 flex items-center gap-2"><Bot size={24}/> Inteligência Artificial</h2><p className="text-sm text-purple-700 mb-6 font-medium">Configure a chave da API para ativar o cálculo fiscal inteligente.</p><div className="relative mb-4"><input type="password" value={openAIApiKey} onChange={(e) => setOpenAIApiKey(e.target.value)} placeholder="sk-proj-..." className="w-full pl-6 pr-10 py-4 rounded-xl border border-purple-300 focus:ring-2 focus:ring-purple-500 outline-none text-sm font-mono shadow-inner bg-white shadow-purple-900/5" /><Key size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-purple-400" /></div><button onClick={handleSaveApiKey} className="bg-purple-600 text-white px-6 py-3 rounded-xl font-bold text-xs uppercase hover:bg-purple-700 transition-all shadow-lg cursor-pointer">Salvar Chave API</button></div>
        <div className="bg-white p-6 sm:p-10 rounded-[3rem] border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-12 justify-center"><div className="h-40 w-full md:w-80 border-2 border-slate-100 bg-slate-50/50 rounded-[2rem] flex items-center justify-center p-8 shadow-inner"><img src={currentLogo || defaultLogoBase64} alt="Logo" className="max-h-full max-w-full object-contain filter drop-shadow-md" /></div><label className="bg-[#0F172A] text-white px-10 py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-blue-600 transition-all shadow-xl flex items-center gap-2"><FileUp size={16}/> Alterar Logo no Banco<input type="file" className="hidden" onChange={handleLogoUpload} accept="image/*" /></label></div>
+    </div>
+  );
+}
+
+// ==========================================
+// ESTUDO DE CASO — gravação de voz por campo, transcrição automática, fotos e geração de documento
+// ==========================================
+function CaseStudyView({ customLogo, showToast }) {
+  const emptyForm = {
+    id: '', titulo: '', cliente: '', autor: '', internal_use_only: true,
+    industry: '', industry_detail: '', component: '', conveying_material: '',
+    conveying_speed: '', lining_material: '', lining_material_thickness: '',
+    base_material: '', fixing_system: '', wear: '', application_temperature: '',
+    corrosion: '', dimension: '', area_to_be_lined: '', kalenborn_reference: '',
+    miscellaneous: '', description: '', fotos: []
+  };
+
+  const [caseStudies, setCaseStudies] = useState([]);
+  const [form, setForm] = useState(emptyForm);
+  const [isListVisible, setIsListVisible] = useState(true);
+  const [recordingField, setRecordingField] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [lang, setLang] = useState('pt-BR');
+  const recognitionRef = useRef(null);
+
+  const carregarLista = async () => {
+    try {
+      const rows = await supabaseRequest('case_studies');
+      setCaseStudies((rows || []).sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at)));
+    } catch (e) { /* tabela pode estar vazia ainda */ }
+  };
+  useEffect(() => { carregarLista(); }, []);
+
+  const novoEstudo = () => { setForm({ ...emptyForm, id: crypto.randomUUID() }); if (window.innerWidth < 1024) setIsListVisible(false); };
+  const abrirEstudo = (cs) => { setForm({ ...emptyForm, ...cs, fotos: Array.isArray(cs.fotos) ? cs.fotos : [] }); if (window.innerWidth < 1024) setIsListVisible(false); };
+
+  const startRecording = (fieldKey) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { showToast('Gravação de voz não é suportada neste navegador. Use o Chrome.'); return; }
+    if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch (e) {} }
+    const recognition = new SpeechRecognition();
+    recognition.lang = lang;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+    recognition.onresult = (e) => {
+      const texto = e.results[0][0].transcript;
+      setForm(f => ({ ...f, [fieldKey]: (f[fieldKey] ? f[fieldKey] + ' ' : '') + texto }));
+    };
+    recognition.onerror = (e) => {
+      if (e.error !== 'aborted') showToast('Erro na gravação: ' + e.error);
+      setRecordingField(null);
+    };
+    recognition.onend = () => { setRecordingField(null); };
+    recognitionRef.current = recognition;
+    setRecordingField(fieldKey);
+    recognition.start();
+  };
+  const stopRecording = () => { if (recognitionRef.current) recognitionRef.current.stop(); };
+
+  const handlePhotoUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const idBase = form.id || crypto.randomUUID();
+    if (!form.id) setForm(f => ({ ...f, id: idBase }));
+    for (const file of files) {
+      try {
+        const fileName = `case-studies/${idBase}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+        const url = await supabaseUpload('portal-files', fileName, file);
+        setForm(f => ({ ...f, fotos: [...f.fotos, { url }] }));
+      } catch (err) { showToast('Erro ao enviar foto.'); }
+    }
+    e.target.value = '';
+  };
+  const removerFoto = (idx) => setForm(f => ({ ...f, fotos: f.fotos.filter((_, i) => i !== idx) }));
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const idFinal = form.id || crypto.randomUUID();
+      const payload = { ...form, id: idFinal, updated_at: new Date().toISOString() };
+      await supabaseRequest('case_studies', 'POST', payload, true);
+      setForm(f => ({ ...f, id: idFinal }));
+      showToast('✅ Estudo de caso salvo!');
+      carregarLista();
+    } catch (e) { showToast('Erro ao salvar estudo de caso.'); }
+    finally { setIsSaving(false); }
+  };
+
+  const campos = [
+    { key: 'industry', label: 'Industry', labelPt: 'Segmento' },
+    { key: 'industry_detail', label: 'Industry detail', labelPt: 'Detalhe do segmento' },
+    { key: 'component', label: 'Component', labelPt: 'Componente' },
+    { key: 'conveying_material', label: 'Conveying material', labelPt: 'Material transportado' },
+    { key: 'conveying_speed', label: 'Conveying speed', labelPt: 'Velocidade de transporte' },
+    { key: 'lining_material', label: 'Lining material', labelPt: 'Material do revestimento' },
+    { key: 'lining_material_thickness', label: 'Lining material thickness', labelPt: 'Espessura do revestimento' },
+    { key: 'base_material', label: 'Base material', labelPt: 'Material da base' },
+    { key: 'fixing_system', label: 'Fixing system', labelPt: 'Sistema de fixação' },
+    { key: 'wear', label: 'Wear', labelPt: 'Tipo de desgaste' },
+    { key: 'application_temperature', label: 'Application temperature', labelPt: 'Temperatura de aplicação' },
+    { key: 'corrosion', label: 'Corrosion', labelPt: 'Corrosão' },
+    { key: 'dimension', label: 'Dimension', labelPt: 'Dimensão' },
+    { key: 'area_to_be_lined', label: 'Area to be lined', labelPt: 'Área a revestir' },
+    { key: 'kalenborn_reference', label: 'Kalenborn reference', labelPt: 'Referência Kalenborn' },
+  ];
+
+  const CampoComMic = ({ fieldKey, label, labelPt, multiline }) => {
+    const gravando = recordingField === fieldKey;
+    const Comp = multiline ? 'textarea' : 'input';
+    return (
+      <div>
+        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">{label} <span className="font-normal normal-case text-slate-400">/ {labelPt}</span></label>
+        <div className="flex items-start gap-2">
+          <Comp
+            {...(multiline ? { rows: 3 } : { type: 'text' })}
+            value={form[fieldKey] || ''}
+            onChange={e => setForm(f => ({ ...f, [fieldKey]: e.target.value }))}
+            placeholder="-"
+            className="flex-1 px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none resize-y"
+          />
+          <button
+            type="button"
+            onClick={() => gravando ? stopRecording() : startRecording(fieldKey)}
+            className={`w-10 h-10 shrink-0 rounded-lg flex items-center justify-center transition-all cursor-pointer ${gravando ? 'bg-rose-500 text-white animate-pulse' : 'bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white'}`}
+            title={gravando ? 'Parar gravação' : 'Gravar áudio e transcrever'}
+          >
+            {gravando ? <MicOff size={16} /> : <Mic size={16} />}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // ===== Geração do documento final (PDF) =====
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const gerarHtmlEstudo = () => {
+    const logoSrc = customLogo || defaultLogoBase64;
+    const pares = [
+      ['industry', 'industry_detail'], ['component', 'conveying_material'],
+      ['conveying_speed', 'lining_material'], ['lining_material_thickness', 'base_material'],
+      ['fixing_system', 'wear'], ['application_temperature', 'corrosion'],
+      ['dimension', 'area_to_be_lined']
+    ];
+    const campoPorKey = Object.fromEntries(campos.map(c => [c.key, c]));
+    const gridRows = pares.map(([k1, k2]) => `
+      <tr>
+        <td style="width:50%;padding:8px 12px;border:1px solid #E4E6E9;vertical-align:top">
+          <div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">${campoPorKey[k1].label}</div>
+          <div style="font-size:10.5pt;font-weight:600;margin-top:2px">${esc(form[k1] || '—')}</div>
+        </td>
+        <td style="width:50%;padding:8px 12px;border:1px solid #E4E6E9;vertical-align:top">
+          <div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">${campoPorKey[k2].label}</div>
+          <div style="font-size:10.5pt;font-weight:600;margin-top:2px">${esc(form[k2] || '—')}</div>
+        </td>
+      </tr>`).join('');
+
+    const fotosHtml = (form.fotos || []).map((f, i) => `
+      <div style="width:48%;display:inline-block;margin:1%;vertical-align:top">
+        <img src="${esc(f.url)}" style="width:100%;height:90mm;object-fit:cover;border:1px solid #C9CDD3">
+        <div style="font-size:8pt;color:#6B7280;margin-top:3px">Foto ${i + 1}</div>
+      </div>`).join('');
+
+    const pagina1 = `
+    <section style="position:relative;padding:0 0 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:297mm">
+      <div style="background:#FFD200;padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20pt;letter-spacing:.02em;color:#111">Project information</div>
+        <img src="${logoSrc}" alt="Kalenborn" style="height:11mm;width:auto;background:#fff;padding:4px 8px;border-radius:4px">
+      </div>
+      <div style="padding:14px 16px 0">
+        <h1 style="margin:0 0 2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18pt">${esc(form.titulo || form.cliente || 'Estudo de Caso')}</h1>
+        ${form.cliente ? `<div style="font-size:10pt;color:#6B7280;margin-bottom:10px">${esc(form.cliente)}</div>` : ''}
+
+        <table style="width:100%;border-collapse:collapse;margin-top:6px">${gridRows}</table>
+
+        ${form.miscellaneous ? `
+        <div style="margin-top:10px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid #111;padding-bottom:3px;margin-bottom:6px">Miscellaneous</div>
+          <p style="margin:0;font-size:10pt;line-height:1.45;text-align:justify">${esc(form.miscellaneous)}</p>
+        </div>` : ''}
+
+        ${form.description ? `
+        <div style="margin-top:14px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid #111;padding-bottom:3px;margin-bottom:6px">Description</div>
+          <p style="margin:0;font-size:10pt;line-height:1.5;text-align:justify">${esc(form.description)}</p>
+        </div>` : ''}
+      </div>
+
+      <div style="position:absolute;left:16px;right:16px;bottom:0;border-top:1px solid #C9CDD3;padding-top:6px;display:flex;justify-content:space-between;font-size:8pt;color:#6B7280">
+        <div>${new Date().toLocaleDateString('pt-BR')}${form.autor ? ` · ${esc(form.autor)}` : ''}</div>
+        <div>${esc(form.kalenborn_reference || '')}</div>
+      </div>
+    </section>`;
+
+    const pagina2 = form.fotos.length > 0 ? `
+    <section style="position:relative;padding:16px;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111;background:#fff;box-sizing:border-box;min-height:297mm;page-break-before:always">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14pt;letter-spacing:.04em;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:10px">Photos</div>
+      ${fotosHtml}
+    </section>` : '';
+
+    const separador = form.fotos.length > 0 ? `<div data-html2canvas-ignore="true" style="position:relative;height:0;border-top:2px dashed #94A3B8;margin:4px 0"><span style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:#fff;padding:0 12px;font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748B;text-transform:uppercase;white-space:nowrap">Fim da página 1 · Fotos</span></div>` : '';
+
+    return pagina1 + separador + pagina2;
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!window.html2pdf) return;
+    setIsGenerating(true);
+    setTimeout(async () => {
+      const el = document.getElementById('case-study-pdf-real');
+      const opt = { margin: 0, filename: `Estudo_Caso_${(form.cliente || form.titulo || 'projeto').replace(/\s+/g, '_')}.pdf`, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css', 'legacy'] } };
+      try { await window.html2pdf().set(opt).from(el).save(); showToast('Estudo de caso baixado!'); }
+      catch (e) { showToast('Erro ao gerar PDF.'); }
+      finally { setIsGenerating(false); }
+    }, 100);
+  };
+
+  return (
+    <div className="flex h-full w-full bg-slate-100 overflow-hidden relative">
+      <div className={`bg-white flex flex-col h-full shadow-2xl z-40 shrink-0 transition-all duration-500 ${isListVisible ? 'w-full lg:w-[320px] translate-x-0 border-r border-slate-200' : 'w-0 -translate-x-full border-none overflow-hidden'}`}>
+        <div className="w-full lg:w-[320px] flex flex-col h-full">
+          <div className="p-5 border-b bg-slate-50">
+            <h2 className="font-black text-slate-800 text-lg uppercase flex items-center gap-2"><Mic size={20} className="text-blue-600" /> Estudo de Caso</h2>
+            <p className="text-xs text-slate-500 mt-1">Grave respostas por voz e gere o documento.</p>
+          </div>
+          <div className="p-4 border-b">
+            <button onClick={novoEstudo} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg shadow-sm flex items-center justify-center gap-2 cursor-pointer text-sm"><Plus size={16} /> Novo Estudo de Caso</button>
+          </div>
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+            {caseStudies.map(cs => (
+              <button key={cs.id} onClick={() => abrirEstudo(cs)} className={`w-full text-left p-3 rounded-lg mb-1 transition-colors ${form.id === cs.id ? 'bg-blue-50 border-blue-200 border text-blue-800' : 'hover:bg-slate-50 border border-transparent text-slate-600'}`}>
+                <div className="font-bold text-xs line-clamp-1">{cs.titulo || cs.cliente || 'Sem título'}</div>
+                <div className="text-[10px] text-slate-400 mt-1">{cs.cliente || ''} {cs.status ? `· ${cs.status}` : ''}</div>
+              </button>
+            ))}
+            {caseStudies.length === 0 && <div className="text-center p-4 text-xs text-slate-400">Nenhum estudo de caso ainda.</div>}
+          </div>
+        </div>
+      </div>
+
+      <button onClick={() => setIsListVisible(!isListVisible)} className="hidden lg:flex absolute top-1/2 -translate-y-1/2 z-[60] bg-white border border-slate-200 shadow-2xl h-14 w-8 items-center justify-center rounded-r-2xl text-slate-400 hover:text-blue-600 transition-all duration-500 cursor-pointer" style={{ left: isListVisible ? '320px' : '0px' }}>{isListVisible ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}</button>
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="p-4 lg:p-6 border-b bg-white flex items-center justify-between gap-3 flex-wrap">
+          <button onClick={() => setIsListVisible(true)} className="lg:hidden bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 px-3 rounded-lg flex items-center gap-2 cursor-pointer text-sm"><ChevronLeft size={16} /> Lista</button>
+          <div className="flex items-center gap-2 ml-auto">
+            <select value={lang} onChange={e => setLang(e.target.value)} className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-2 outline-none cursor-pointer">
+              <option value="pt-BR">🎙️ Falar em Português</option>
+              <option value="en-US">🎙️ Speak in English</option>
+            </select>
+            <button onClick={handleSave} disabled={isSaving} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer text-sm disabled:opacity-50">{isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />} Salvar</button>
+            <button onClick={handleDownloadPdf} disabled={isGenerating} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer text-sm disabled:opacity-50">{isGenerating ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />} Gerar PDF</button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-8">
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Título do projeto</label>
+                  <input type="text" value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} placeholder="Ex: Reforma revestimento classificador TiO₂" className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Cliente</label>
+                  <input type="text" value={form.cliente} onChange={e => setForm(f => ({ ...f, cliente: e.target.value }))} placeholder="Ex: Tronox Pigmentos do Brasil" className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Responsável</label>
+                  <input type="text" value={form.autor} onChange={e => setForm(f => ({ ...f, autor: e.target.value }))} placeholder="Seu nome" className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Kalenborn reference</label>
+                  <input type="text" value={form.kalenborn_reference} onChange={e => setForm(f => ({ ...f, kalenborn_reference: e.target.value }))} placeholder="Ex: BR13654/25" className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <h3 className="font-black text-sm uppercase text-slate-700 mb-4">Perguntas do projeto</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {campos.map(c => <CampoComMic key={c.key} fieldKey={c.key} label={c.label} labelPt={c.labelPt} />)}
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <CampoComMic fieldKey="miscellaneous" label="Miscellaneous" labelPt="Observações gerais" multiline />
+              <CampoComMic fieldKey="description" label="Description" labelPt="Descrição completa do projeto" multiline />
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <h3 className="font-black text-sm uppercase text-slate-700 mb-1">Fotos (formato retrato)</h3>
+              <p className="text-xs text-slate-400 mb-4">Tire foto ou envie da galeria.</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {form.fotos.map((f, i) => (
+                  <div key={i} className="relative aspect-[3/4] rounded-lg overflow-hidden border border-slate-200 group">
+                    <img src={f.url} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
+                    <button onClick={() => removerFoto(i)} className="absolute top-1.5 right-1.5 w-7 h-7 bg-rose-500 text-white rounded-lg flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+                <label className="aspect-[3/4] rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all text-slate-400 hover:text-blue-500">
+                  <Camera size={22} />
+                  <span className="text-[10px] font-bold text-center px-2">Tirar foto ou enviar</span>
+                  <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handlePhotoUpload} />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ position: 'fixed', top: 0, left: '-99999px', width: '210mm' }}>
+        <div id="case-study-pdf-real" dangerouslySetInnerHTML={{ __html: gerarHtmlEstudo() }} />
+      </div>
     </div>
   );
 }
