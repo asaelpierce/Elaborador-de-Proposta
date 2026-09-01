@@ -1035,7 +1035,7 @@ function EstoqueView({ products, estoque, showToast, refreshData }) {
   const [estoqueForm, setEstoqueForm] = useState({ product_id: '', quantidade: '', localizacao: '', lote: '', data_entrada: new Date().toISOString().split('T')[0], observacao: '' });
 
   // Form: novo produto
-  const emptyProduct = { id: '', codkalenborn: '', name: '', um: 'KG', price: '', ncm: '', icms: '18%', ipi: '0', piscofins: '9.25', codorigem: '0', entrega: '', codvale: '', category: '', descricao_original: '', caracteristica: '', imagem_url: '', garantia: '', composicao_quimica: [], propriedades_material: [] };
+  const emptyProduct = { id: '', codkalenborn: '', name: '', um: 'KG', price: '', ncm: '', icms: '18%', ipi: '0', piscofins: '9.25', codorigem: '0', entrega: '', codvale: '', category: '', descricao_original: '', caracteristica: '', imagem_url: '', garantia: '', subtitulo: '', composicao_quimica: [], propriedades_material: [], camadas_construcao: [] };
   const [productForm, setProductForm] = useState(emptyProduct);
 
   // Form: editar preço
@@ -1280,7 +1280,7 @@ function EstoqueView({ products, estoque, showToast, refreshData }) {
                       </td>
                       <td className="p-4 text-center flex items-center justify-center gap-1.5">
                         <button onClick={() => { setPriceForm({ id: prod.id, price: prod.price || '' }); setModalMode('edit_price'); }} className="w-8 h-8 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-500 hover:text-white transition-all cursor-pointer flex items-center justify-center" title="Alterar Preço"><DollarSign size={14}/></button>
-                        <button onClick={() => { setProductForm({ ...emptyProduct, ...prod, composicao_quimica: Array.isArray(prod.composicao_quimica) ? prod.composicao_quimica : [], propriedades_material: Array.isArray(prod.propriedades_material) ? prod.propriedades_material : [] }); setModalMode('add_produto'); }} className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all cursor-pointer flex items-center justify-center" title="Editar Produto / Ficha Técnica"><Edit size={14}/></button>
+                        <button onClick={() => { setProductForm({ ...emptyProduct, ...prod, composicao_quimica: Array.isArray(prod.composicao_quimica) ? prod.composicao_quimica : [], propriedades_material: Array.isArray(prod.propriedades_material) ? prod.propriedades_material : [], camadas_construcao: Array.isArray(prod.camadas_construcao) ? prod.camadas_construcao : [] }); setModalMode('add_produto'); }} className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all cursor-pointer flex items-center justify-center" title="Editar Produto / Ficha Técnica"><Edit size={14}/></button>
                       </td>
                     </tr>
                   );
@@ -1419,9 +1419,21 @@ function EstoqueView({ products, estoque, showToast, refreshData }) {
               </div>
 
               <div>
+                <label className={labelClass}>Subtítulo (Ficha Técnica)</label>
+                <input type="text" value={productForm.subtitulo} onChange={e => setProductForm(f => ({...f, subtitulo: e.target.value}))} placeholder="Ex: Chapa antidesgaste cerâmica / Ceramic wear plate" className={fieldClass} />
+              </div>
+
+              <div>
                 <label className={labelClass}>Garantia</label>
                 <input type="text" value={productForm.garantia} onChange={e => setProductForm(f => ({...f, garantia: e.target.value}))} placeholder="Ex: 12 meses a partir da emissão da NF" className={fieldClass} />
               </div>
+
+              <TableEditor
+                label="Construção em Camadas (Ficha Técnica)"
+                rows={productForm.camadas_construcao}
+                columns={[{ key: 'espessura', placeholder: 'Ex: 50,00 mm' }, { key: 'material', placeholder: 'Ex: Cerâmica alta alumina 95% Kalocer' }]}
+                onChange={rows => setProductForm(f => ({ ...f, camadas_construcao: rows }))}
+              />
 
               <TableEditor
                 label="Composição Química (Ficha Técnica)"
@@ -2465,6 +2477,75 @@ function SimulatorView({ showToast, refreshData, products = [] }) {
 // ==========================================
 // EDITOR DE TABELA DINÂMICA (Composição / Propriedades)
 // ==========================================
+// ==========================================
+// EXTRAÇÃO AUTOMÁTICA DE CARACTERÍSTICAS TÉCNICAS
+// Lê o texto corrido já cadastrado (campo "característica") e
+// transforma em linhas de tabela, sem precisar digitar nada de novo.
+// ==========================================
+function parseFeaturesFromText(text) {
+  if (!text) return [];
+  const rows = [];
+  const addRow = (label, value) => {
+    if (value && String(value).trim()) rows.push({ caracteristica: label, valor: String(value).trim().replace(/\s+/g, ' ').replace(/[,.;]+$/, '') });
+  };
+
+  let m = text.match(/dimens(?:[õo]es|ão)\s*(?:de\s*)?(\d+)\s*(?:x|×)\s*(\d+)\s*mm/i);
+  if (m) addRow('Dimensões / Dimensions', `${m[1]}×${m[2]} mm`);
+
+  m = text.match(/espessura total (?:d[ae]\s*)?(?:chapa de desgaste|placa de desgaste|revestimento)?:?\s*([\d,]+)\s*mm/i);
+  if (m) addRow('Espessura total / Total thickness', `${m[1]} mm`);
+
+  const chapaMatch = text.match(/chapa base[\s\S]{0,160}?(?=e cer[âa]mica|cer[âa]mica de alta alumina)/i);
+  if (chapaMatch) {
+    const sub = chapaMatch[0];
+    const grade = (sub.match(/ASTM\s*[\w\d]+/i) || [])[0];
+    const esp = (sub.match(/espessura\s*(?:de\s*)?([\d,]+)\s*mm/i) || [])[1];
+    const abas = (sub.match(/(sem abas laterais|com abas laterais e al[çc]a|com abas laterais|com aba|com al[çc]a)/i) || [])[0];
+    const acabamento = (sub.match(/acabamento\s+(\w+)/i) || [])[1];
+    addRow('Chapa base / Steel backing', [grade, esp ? `${esp} mm` : null, acabamento, abas].filter(Boolean).join(' · '));
+  }
+
+  const revMatch = text.match(/cer[âa]mica de alta alumina[\s\S]{0,140}?(?=fixada|sobre base)/i);
+  if (revMatch) {
+    const sub = revMatch[0];
+    const pct = (sub.match(/(\d{2,3}(?:[.,]\d+)?)\s*%/) || [])[1];
+    const marca = /kalocer/i.test(sub) ? 'Kalocer' : null;
+    const esp = (sub.match(/espessura\s*(?:de\s*)?([\d,]+)\s*mm/i) || [])[1];
+    addRow('Revestimento / Ceramic lining', `${marca ? marca + ' ' : ''}alta alumina${pct ? ' ' + pct + '%' : ''}${esp ? ' · ' + esp + ' mm' : ''}`);
+  }
+
+  const magMatch = text.match(/base magn[ée]tica\s*espessura\s*([\d,]+)\s*mm/i);
+  if (magMatch) {
+    addRow('Base Magnética / Magnetic base', `${magMatch[1]} mm`);
+  } else {
+    const borrMatch = text.match(/borracha natural[\s\S]{0,120}?(?=\.|incluindo|incluso)/i);
+    if (borrMatch) {
+      const sub = borrMatch[0];
+      const dureza = (sub.match(/(\d+)\s*Shore\s*A/i) || [])[1];
+      const esp = (sub.match(/espessura\s*(?:de\s*)?([\d,]+)\s*mm/i) || [])[1];
+      const val = [dureza ? `${dureza} Shore A` : null, esp ? `${esp} mm` : null].filter(Boolean).join(' · ');
+      if (val) addRow('Elemento elástico / Rubber cushion', `Borracha natural · ${val}`);
+    }
+  }
+
+  const fixMatch = text.match(/inclu(?:indo|so)[\s\S]{0,180}?(?=\.|espessura total)/i);
+  if (fixMatch) {
+    const val = fixMatch[0].replace(/^inclu(?:indo|so)\s*/i, '').replace(/para montagem no equipamento/i, '').trim();
+    addRow('Fixação / Fastening', val);
+  }
+
+  m = text.match(/temperatura m[áa]xima de opera[çc][ãa]o:?\s*(\d+)\s*°?\s*C?/i);
+  if (m) addRow('Temp. máx. de operação / Max. service temp.', `${m[1]} °C`);
+
+  m = text.match(/desenho de refer[êe]ncia:?\s*([^\.\n]+)/i);
+  if (m && !/sem desenho/i.test(m[1])) addRow('Desenho de referência / Reference drawing', m[1]);
+
+  m = text.match(/refer[êe]ncia kalenborn:?\s*([^\.\n]+)/i);
+  if (m) addRow('Referência Kalenborn', m[1]);
+
+  return rows;
+}
+
 function TableEditor({ label, rows, columns, onChange }) {
   const safeRows = Array.isArray(rows) ? rows : [];
   const updateRow = (idx, key, value) => {
@@ -2549,7 +2630,9 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
   const renderFicha = () => {
     if (!selectedProduct) return null;
     const composicao = Array.isArray(selectedProduct.composicao_quimica) ? selectedProduct.composicao_quimica : [];
-    const propriedades = Array.isArray(selectedProduct.propriedades_material) ? selectedProduct.propriedades_material : [];
+    const manualProps = Array.isArray(selectedProduct.propriedades_material) ? selectedProduct.propriedades_material : [];
+    const propriedades = manualProps.length > 0 ? manualProps : parseFeaturesFromText(selectedProduct.caracteristica || '');
+    const camadas = Array.isArray(selectedProduct.camadas_construcao) ? selectedProduct.camadas_construcao : [];
     const nomeExibicao = (selectedProduct.name || selectedProduct.codkalenborn || selectedProduct.id || '').toUpperCase();
 
     return (
@@ -2567,7 +2650,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
         {/* Título do produto */}
         <div className="flex items-end justify-between mb-3">
           <h1 className="text-lg font-black uppercase tracking-tight">{nomeExibicao}</h1>
-          <div className="text-[10px] text-gray-500 text-right">{selectedProduct.category || ''}</div>
+          <div className="text-[10px] text-gray-500 text-right max-w-[45%]">{selectedProduct.subtitulo || selectedProduct.category || ''}</div>
         </div>
 
         {/* Barra de códigos */}
@@ -2590,6 +2673,17 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
               )}
             </div>
             <div className="text-[9px] text-gray-400 mt-1 italic">Figura 1 — Vista isométrica do produto.</div>
+
+            {camadas.length > 0 && (
+              <div className="mt-4 border-l-4 pl-3" style={{ borderColor: '#FFD200' }}>
+                <h4 className="font-black text-[10px] uppercase tracking-wide mb-1.5">Construção em {camadas.length} Camadas</h4>
+                <div className="space-y-1">
+                  {camadas.map((c, i) => (
+                    <div key={i} className="text-[10px] leading-tight"><span className="font-black">{c.espessura}</span> — {c.material}</div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
