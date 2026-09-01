@@ -2550,73 +2550,92 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     if (!selectedProduct) return null;
     const composicao = Array.isArray(selectedProduct.composicao_quimica) ? selectedProduct.composicao_quimica : [];
     const propriedades = Array.isArray(selectedProduct.propriedades_material) ? selectedProduct.propriedades_material : [];
+    const nomeExibicao = (selectedProduct.name || selectedProduct.codkalenborn || selectedProduct.id || '').toUpperCase();
+
     return (
       <div style={{ fontFamily: 'Arial, sans-serif', color: '#000', fontSize: '11px' }}>
-        <header className="flex justify-between items-center mb-6 border-b-2 border-black pb-3">
-          <img src={customLogo || defaultLogoBase64} alt="Logo" className="h-14 object-contain" />
-          <div className="text-right"><h2 className="text-lg font-black text-[#14325a]">FICHA TÉCNICA</h2><div className="text-[10px] font-bold text-gray-500">TÍTULO: {(selectedProduct.name || selectedProduct.codkalenborn || selectedProduct.id || '').toUpperCase()}</div></div>
+        {/* Header */}
+        <header className="flex justify-between items-center pb-4 mb-1">
+          <img src={customLogo || defaultLogoBase64} alt="Logo" className="h-10 object-contain" />
+          <div className="text-right">
+            <h2 className="text-xl font-black tracking-tight text-[#14325a] leading-none">FICHA TÉCNICA</h2>
+            <div className="text-[9px] font-bold text-gray-400 tracking-widest uppercase mt-0.5">Technical Data Sheet</div>
+          </div>
         </header>
+        <div className="h-[3px] w-full mb-4" style={{ background: 'linear-gradient(to right, #14325a 0%, #14325a 70%, #FFD200 70%, #FFD200 100%)' }} />
 
-        <div className="grid grid-cols-2 gap-6 mb-6">
+        {/* Título do produto */}
+        <div className="flex items-end justify-between mb-3">
+          <h1 className="text-lg font-black uppercase tracking-tight">{nomeExibicao}</h1>
+          <div className="text-[10px] text-gray-500 text-right">{selectedProduct.category || ''}</div>
+        </div>
+
+        {/* Barra de códigos */}
+        <div className="grid grid-cols-5 border border-black mb-5 text-[9px]">
+          <div className="p-2 border-r border-black"><div className="text-gray-500 font-bold uppercase tracking-wider text-[8px]">Cód. Vale</div><div className="font-black text-[11px]">{selectedProduct.codvale || '—'}</div></div>
+          <div className="p-2 border-r border-black"><div className="text-gray-500 font-bold uppercase tracking-wider text-[8px]">Cód. Kalenborn</div><div className="font-black text-[11px]">{selectedProduct.codkalenborn || selectedProduct.id || '—'}</div></div>
+          <div className="p-2 border-r border-black"><div className="text-gray-500 font-bold uppercase tracking-wider text-[8px]">NCM</div><div className="font-black text-[11px]">{selectedProduct.ncm || '—'}</div></div>
+          <div className="p-2 border-r border-black"><div className="text-gray-500 font-bold uppercase tracking-wider text-[8px]">IPI</div><div className="font-black text-[11px]">{selectedProduct.ipi || '0'}%</div></div>
+          <div className="p-2"><div className="text-gray-500 font-bold uppercase tracking-wider text-[8px]">Unidade</div><div className="font-black text-[11px]">{selectedProduct.um || 'UN'}</div></div>
+        </div>
+
+        {/* Imagem + Descrição / Características */}
+        <div className="grid grid-cols-2 gap-6 mb-5">
           <div>
-            <div className="w-full h-56 border border-black rounded-sm flex items-center justify-center overflow-hidden bg-white">
+            <div className="w-full h-52 border border-gray-300 rounded-sm flex items-center justify-center overflow-hidden bg-gray-50">
               {selectedProduct.imagem_url ? (
                 <img src={selectedProduct.imagem_url} alt={selectedProduct.name} className="max-w-full max-h-full object-contain" />
               ) : (
-                <span className="text-gray-300 text-xs italic">Sem imagem cadastrada</span>
+                <span className="text-gray-300 text-[10px] italic">Foto ou desenho do produto</span>
               )}
             </div>
-            <h3 className="font-bold text-[11px] uppercase mt-4 mb-1">Descrição:</h3>
-            <div className="text-[10px] leading-relaxed text-justify whitespace-pre-wrap">{selectedProduct.descricao_original || 'Sem descrição detalhada.'}</div>
+            <div className="text-[9px] text-gray-400 mt-1 italic">Figura 1 — Vista isométrica do produto.</div>
           </div>
 
           <div>
-            <h3 className="font-bold text-[11px] uppercase mb-1">Características:</h3>
-            <div className="text-[10px] leading-relaxed text-justify whitespace-pre-wrap mb-3">{selectedProduct.caracteristica || 'Sem característica cadastrada.'}</div>
-
-            {composicao.length > 0 && (
-              <>
-                <h3 className="font-bold text-[11px] uppercase mb-1 mt-3">Especificações Técnicas:</h3>
-                <table className="w-full border-collapse text-[10px]">
-                  <thead>
-                    <tr className="bg-gray-200">
-                      <th className="border border-black px-2 py-1 text-left">Item</th>
-                      <th className="border border-black px-2 py-1">Unid.</th>
-                      <th className="border border-black px-2 py-1">Resultado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {composicao.map((row, i) => (
-                      <tr key={i}>
-                        <td className="border border-black px-2 py-1">{row.item}</td>
-                        <td className="border border-black px-2 py-1 text-center">{row.unidade}</td>
-                        <td className="border border-black px-2 py-1 text-center font-bold">{row.valor}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </>
-            )}
+            <h3 className="font-black text-[10px] uppercase tracking-widest border-b border-black pb-1 mb-2">Descrição <span className="text-gray-400 font-normal normal-case">/ Description</span></h3>
+            <div className="text-[10px] leading-relaxed text-justify whitespace-pre-wrap">{selectedProduct.descricao_original || 'Sem descrição detalhada.'}</div>
           </div>
         </div>
 
-        {propriedades.length > 0 && (
-          <div className="mb-6">
-            <h3 className="font-bold text-[11px] uppercase mb-1">Propriedades do Produto:</h3>
+        {/* Características (tabela label/valor, estilo KALIMPACT) */}
+        {(propriedades.length > 0 || selectedProduct.caracteristica) && (
+          <div className="mb-5">
+            <h3 className="font-black text-[10px] uppercase tracking-widest border-b border-black pb-1 mb-2">Características <span className="text-gray-400 font-normal normal-case">/ Features</span></h3>
+            <table className="w-full border-collapse text-[10px]">
+              <tbody>
+                {propriedades.map((row, i) => (
+                  <tr key={i} className={i % 2 === 1 ? 'bg-gray-50' : ''}>
+                    <td className="py-1.5 px-1 text-gray-500 w-1/3">{row.caracteristica}</td>
+                    <td className="py-1.5 px-1 font-bold">{[row.valor, row.unidade].filter(Boolean).join(' ')}</td>
+                  </tr>
+                ))}
+                {propriedades.length === 0 && selectedProduct.caracteristica && (
+                  <tr><td colSpan={2} className="py-1.5 px-1 whitespace-pre-wrap">{selectedProduct.caracteristica}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Composição química (materiais tipo Kalocer) */}
+        {composicao.length > 0 && (
+          <div className="mb-5">
+            <h3 className="font-black text-[10px] uppercase tracking-widest border-b border-black pb-1 mb-2">Composição Química <span className="text-gray-400 font-normal normal-case">/ Chemical Composition</span></h3>
             <table className="w-full border-collapse text-[10px]">
               <thead>
-                <tr className="bg-gray-200">
-                  <th className="border border-black px-2 py-1 text-left w-1/2">Característica</th>
-                  <th className="border border-black px-2 py-1">Unidade</th>
-                  <th className="border border-black px-2 py-1">Valor</th>
+                <tr className="bg-gray-100">
+                  <th className="border border-gray-300 px-2 py-1 text-left">Item</th>
+                  <th className="border border-gray-300 px-2 py-1">Unid.</th>
+                  <th className="border border-gray-300 px-2 py-1">Resultado</th>
                 </tr>
               </thead>
               <tbody>
-                {propriedades.map((row, i) => (
+                {composicao.map((row, i) => (
                   <tr key={i}>
-                    <td className="border border-black px-2 py-1">{row.caracteristica}</td>
-                    <td className="border border-black px-2 py-1 text-center">{row.unidade}</td>
-                    <td className="border border-black px-2 py-1 text-center font-bold">{row.valor}</td>
+                    <td className="border border-gray-300 px-2 py-1">{row.item}</td>
+                    <td className="border border-gray-300 px-2 py-1 text-center">{row.unidade}</td>
+                    <td className="border border-gray-300 px-2 py-1 text-center font-bold">{row.valor}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2624,16 +2643,14 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 text-[10px] mb-2">
-          <div><span className="font-bold">Garantia:</span> {selectedProduct.garantia || '—'}</div>
-          <div><span className="font-bold">Part Number / Cód Vale:</span> {selectedProduct.codvale || 'N/A'}</div>
-          <div><span className="font-bold">NCM:</span> {selectedProduct.ncm || 'Consultar'}</div>
-          <div><span className="font-bold">IPI:</span> {selectedProduct.ipi || '0'}%</div>
-          <div><span className="font-bold">Cód Kalenborn (KBN):</span> {selectedProduct.id}</div>
-          <div><span className="font-bold">Unidade de Medida:</span> {selectedProduct.um || 'UN'}</div>
-        </div>
+        {selectedProduct.garantia && (
+          <div className="text-[9px] text-gray-500 mb-2"><span className="font-bold text-black">Garantia:</span> {selectedProduct.garantia}</div>
+        )}
 
-        <footer className="mt-10 pt-3 border-t-2 border-black text-[9px] text-center font-bold"><div>KALENBORN DO BRASIL LTDA | Estrada Antiga BH - Pedro Leopoldo, 1150 Galpão 03 - Vespasiano / MG</div><div>Tel.: +55 31 3499-4000 | comercial@kalenborn.com.br | www.kalenborn.com.br</div></footer>
+        <footer className="mt-8 pt-2 border-t border-gray-300 text-[8px] text-gray-500 flex justify-between">
+          <div>KALENBORN DO BRASIL LTDA · Estrada Antiga BH – Pedro Leopoldo, 1150 Galpão 03 – Vespasiano / MG</div>
+          <div>+55 31 3499-4000 · comercial@kalenborn.com.br · www.kalenborn.com.br</div>
+        </footer>
       </div>
     );
   };
