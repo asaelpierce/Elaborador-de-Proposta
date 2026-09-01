@@ -2679,8 +2679,6 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     const fixacaoRow = propriedades.find(r => /fixa[çc][ãa]o/i.test(r.caracteristica || ''))?.valor;
     const desenhoRow = propriedades.find(r => /desenho de refer[êe]ncia/i.test(r.caracteristica || ''))?.valor;
 
-    // Textos padrão da Página 2 — sempre os mesmos em todo produto (igual ao modelo),
-    // a não ser que o produto tenha um texto próprio cadastrado.
     const aplicacaoDefault = [
       'Revestimento de chutes, calhas e caixas de transferência sujeitos a impacto de minério.',
       'Pontos de queda com material granulado e abrasivo, com temperatura de superfície até 80 °C.',
@@ -2711,194 +2709,149 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     const observ = customObserv.length > 0 ? customObserv : observacoesDefault;
 
     const nomeExibicao = (selectedProduct.name || selectedProduct.codkalenborn || selectedProduct.id || '').toUpperCase();
-    const temPagina2 = true;
 
-    const C = { azul: '#1B3A6B', amarelo: '#FFD200', borda: '#C9CDD3', boxBg: '#F5F6F7', cinza: '#6B7280', cinzaEscuro: '#3A3F46', linhaFina: '#E4E6E9', notaBg: '#FAFAF6' };
-    const fontCond = "'Barlow Condensed', 'Helvetica Neue', Arial, sans-serif";
-    const fontBase = "Barlow, 'Helvetica Neue', Arial, sans-serif";
+    // Escapa texto pra não quebrar o HTML (mantém apenas <strong> que a gente mesmo insere)
+    const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    const Rodape = ({ pagina }) => (
-      <div style={{ position: 'absolute', left: '13mm', right: '13mm', bottom: '8mm', borderTop: `1px solid ${C.borda}`, paddingTop: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '7.5pt', color: C.cinza, lineHeight: 1.3 }}>
-        <div><strong style={{ color: '#111' }}>KALENBORN DO BRASIL LTDA</strong> · Estrada Antiga BH — Pedro Leopoldo, 1150, Galpão 03 · Vespasiano / MG<br/>+55 31 3499-4000 · comercial@kalenborn.com.br · www.kalenborn.com.br</div>
-        <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Página {pagina} de {temPagina2 ? 2 : 1}</div>
+    // Negrita palavras-chave técnicas na descrição, igual ao texto de exemplo do modelo
+    const boldKeywords = (text) => {
+      const termos = ['KALIMPACT', 'cer[âa]mica de alta alumina[^,.;]*', 'ASTM\\s*[A-Z0-9]+', 'borracha natural(?:\\s+vulcanizada)?', 'Kalocer'];
+      const combinada = new RegExp(termos.join('|'), 'gi');
+      return esc(text).replace(combinada, (m) => `<strong>${m}</strong>`);
+    };
+
+    const imgProduto = selectedProduct.imagem_url
+      ? `<img src="${esc(selectedProduct.imagem_url)}" style="max-width:100%;max-height:100%;object-fit:contain">`
+      : `<span style="color:#B4B8BE;font-size:9pt;font-style:italic">Foto ou desenho do produto</span>`;
+
+    const camadasHtml = camadas.length > 0 ? `
+      <div style="margin-top:4px;border-left:3px solid #FFD200;background:#FAFAF6;padding:7px 10px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11pt;letter-spacing:.06em;text-transform:uppercase">Construção em ${camadas.length} camadas</div>
+        <div style="display:flex;flex-direction:column;gap:3px;margin-top:5px;font-size:9.5pt;line-height:1.3">
+          ${camadas.map((c, i) => `<div${i === camadas.length - 1 ? ' style="border-top:1px solid #D8D8CE;padding-top:3px;margin-top:2px"' : ''}><strong>${esc(c.espessura)}</strong> — ${esc(c.material)}</div>`).join('')}
+        </div>
+      </div>` : '';
+
+    const featuresRows = propriedades.map(r => `
+      <tr style="border-bottom:1px solid #E4E6E9">
+        <td style="padding:4px 8px 4px 0;width:42%;color:#3A3F46;vertical-align:top">${esc(r.caracteristica)}</td>
+        <td style="padding:4px 0;font-weight:600;vertical-align:top">${esc([r.valor, r.unidade].filter(Boolean).join(' '))}</td>
+      </tr>`).join('');
+
+    const propsRows = composicao.map((r, i) => `
+      <tr style="border-bottom:1px solid #E4E6E9;background:${i % 2 === 1 ? '#F5F6F7' : 'transparent'}">
+        <td style="padding:5px 9px;vertical-align:top;color:#3A3F46">${esc(r.item)}</td>
+        <td style="padding:5px 9px;vertical-align:top;white-space:pre-line">${esc(r.unidade)}</td>
+        <td style="padding:5px 9px;vertical-align:top;font-weight:600;white-space:pre-line">${esc(r.valor)}</td>
+      </tr>`).join('');
+
+    const liItems = (arr) => arr.map(item => `<li>${esc(item)}</li>`).join('');
+
+    const logoSrc = customLogo || defaultLogoBase64;
+    const subtituloTexto = selectedProduct.subtitulo || selectedProduct.category || '';
+
+    const pagina1 = `
+    <section class="page" style="position:relative;padding:12mm 13mm 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:297mm">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+        <img src="${logoSrc}" alt="Kalenborn Wear Protection Solutions" style="height:16mm;width:auto;display:block">
+        <div style="text-align:right;line-height:1">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:23pt;letter-spacing:.02em;color:#1B3A6B">FICHA TÉCNICA</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:500;font-size:11.5pt;letter-spacing:.14em;color:#8A9099;margin-top:3px">TECHNICAL DATA SHEET</div>
+        </div>
       </div>
-    );
 
-    const TituloSecao = ({ children, sub }) => (
-      <div style={{ fontFamily: fontCond, fontWeight: 700, fontSize: '12.5pt', letterSpacing: '.08em', textTransform: 'uppercase', borderBottom: '2px solid #111', paddingBottom: '3px', marginBottom: '7px' }}>
-        {children}{sub && <span style={{ color: C.cinza, fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}> / {sub}</span>}
+      <div style="height:3px;background:#111111;margin:7px 0 0"></div>
+      <div style="height:3px;background:#FFD200;margin:2px 0 10px"></div>
+
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:9px">
+        <h1 style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:21pt;letter-spacing:.01em">${esc(nomeExibicao)}</h1>
+        <div style="font-size:9.5pt;color:#6B7280;white-space:nowrap">${esc(subtituloTexto)}</div>
       </div>
-    );
 
-    return (
-      <div style={{ fontFamily: fontBase, color: '#111111' }}>
-        {/* ===== PÁGINA 1 ===== */}
-        <section style={{ position: 'relative', minHeight: '267mm', boxSizing: 'border-box' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
-            <img src={customLogo || defaultLogoBase64} alt="Logo" style={{ height: '16mm', width: 'auto', display: 'block' }} />
-            <div style={{ textAlign: 'right', lineHeight: 1 }}>
-              <div style={{ fontFamily: fontCond, fontWeight: 700, fontSize: '23pt', letterSpacing: '.02em', color: C.azul }}>FICHA TÉCNICA</div>
-              <div style={{ fontFamily: fontCond, fontWeight: 500, fontSize: '11.5pt', letterSpacing: '.14em', color: C.cinza, marginTop: 3 }}>TECHNICAL DATA SHEET</div>
-            </div>
-          </div>
-
-          <div style={{ height: 3, background: '#111', margin: '7px 0 0' }} />
-          <div style={{ height: 3, background: C.amarelo, margin: '2px 0 10px' }} />
-
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 16, marginBottom: 9 }}>
-            <h1 style={{ margin: 0, fontFamily: fontCond, fontWeight: 700, fontSize: '21pt', letterSpacing: '.01em' }}>{nomeExibicao}</h1>
-            <div style={{ fontSize: '9.5pt', color: C.cinza, whiteSpace: 'nowrap' }}>{selectedProduct.subtitulo || selectedProduct.category || ''}</div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 1, background: C.borda, border: `1px solid ${C.borda}`, marginBottom: 11 }}>
-            {[['Cód. Vale', selectedProduct.codvale], ['Cód. Kalenborn', selectedProduct.codkalenborn || selectedProduct.id], ['NCM', selectedProduct.ncm], ['IPI', `${selectedProduct.ipi || '0'}%`], ['Unidade', selectedProduct.um || 'UN']].map(([label, val], i) => (
-              <div key={i} style={{ background: C.boxBg, padding: '5px 8px' }}>
-                <div style={{ fontSize: '7.5pt', letterSpacing: '.08em', color: C.cinza, textTransform: 'uppercase' }}>{label}</div>
-                <div style={{ fontSize: '11pt', fontWeight: 600 }}>{val || '—'}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '74mm 1fr', gap: '8mm', alignItems: 'start' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ border: `1px solid ${C.borda}`, background: '#FBFBFC', padding: 4 }}>
-                <div style={{ width: '100%', height: '66mm', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                  {selectedProduct.imagem_url ? (
-                    <img src={selectedProduct.imagem_url} alt={selectedProduct.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                  ) : (
-                    <span style={{ color: '#B4B8BE', fontSize: '9pt', fontStyle: 'italic' }}>Foto ou desenho do produto</span>
-                  )}
-                </div>
-              </div>
-              <div style={{ fontSize: '8pt', color: C.cinza, lineHeight: 1.35 }}>Figura 1 — Vista isométrica do produto.</div>
-
-              {camadas.length > 0 && (
-                <div style={{ marginTop: 4, borderLeft: `3px solid ${C.amarelo}`, background: C.notaBg, padding: '7px 10px' }}>
-                  <div style={{ fontFamily: fontCond, fontWeight: 700, fontSize: '11pt', letterSpacing: '.06em', textTransform: 'uppercase' }}>Construção em {camadas.length} Camadas</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 5, fontSize: '9.5pt', lineHeight: 1.3 }}>
-                    {camadas.map((c, i) => (
-                      <div key={i} style={i === camadas.length - 1 ? { borderTop: '1px solid #D8D8CE', paddingTop: 3, marginTop: 2 } : {}}>
-                        <strong>{c.espessura}</strong> — {c.material}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <TituloSecao sub="Description">Descrição</TituloSecao>
-              <p style={{ margin: 0, fontSize: '10.5pt', lineHeight: 1.45, textAlign: 'justify' }}>{selectedProduct.caracteristica || selectedProduct.descricao_original || 'Sem descrição cadastrada.'}</p>
-
-              {propriedades.length > 0 && (
-                <>
-                  <div style={{ marginTop: 13 }}><TituloSecao sub="Features">Características</TituloSecao></div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5pt', marginTop: 4 }}>
-                    <tbody>
-                      {propriedades.map((row, i) => (
-                        <tr key={i} style={{ borderBottom: `1px solid ${C.linhaFina}` }}>
-                          <td style={{ padding: '4px 8px 4px 0', width: '42%', color: C.cinzaEscuro, verticalAlign: 'top' }}>{row.caracteristica}</td>
-                          <td style={{ padding: '4px 0', fontWeight: 600, verticalAlign: 'top' }}>{[row.valor, row.unidade].filter(Boolean).join(' ')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </>
-              )}
-            </div>
-          </div>
-
-          {!temPagina2 && selectedProduct.garantia && (
-            <div style={{ fontSize: '9pt', color: C.cinza, marginTop: 11 }}><strong style={{ color: '#111' }}>Garantia:</strong> {selectedProduct.garantia}</div>
-          )}
-
-          <Rodape pagina={1} />
-        </section>
-
-        {/* Marcador visual de quebra de página — só aparece na tela, o PDF ignora (data-html2canvas-ignore) */}
-        {temPagina2 && (
-          <div data-html2canvas-ignore="true" style={{ position: 'relative', height: 0, borderTop: '2px dashed #94A3B8', margin: '4px 0' }}>
-            <span style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', background: '#fff', padding: '0 12px', fontSize: 9, fontWeight: 700, letterSpacing: '.08em', color: '#64748B', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Fim da página 1 · Início da página 2</span>
-          </div>
-        )}
-
-        {/* ===== PÁGINA 2 ===== */}
-        {temPagina2 && (
-          <section style={{ position: 'relative', minHeight: '267mm', boxSizing: 'border-box', pageBreakBefore: 'always', marginTop: '15mm' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #111', paddingBottom: 6, marginBottom: 11 }}>
-              <div style={{ fontFamily: fontCond, fontWeight: 700, fontSize: '14pt', letterSpacing: '.04em' }}>{nomeExibicao}</div>
-              <div style={{ fontSize: '8.5pt', color: C.cinza, letterSpacing: '.1em', textTransform: 'uppercase' }}>Ficha Técnica · Cód. Vale {selectedProduct.codvale || '—'}</div>
-            </div>
-
-            {composicao.length > 0 && (
-              <>
-                <div style={{ fontFamily: fontCond, fontWeight: 700, fontSize: '12.5pt', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 5 }}>
-                  Propriedades do produto <span style={{ color: C.cinza, fontWeight: 500, textTransform: 'none' }}>/ Product properties</span>
-                </div>
-                {selectedProduct.propriedades_subtitulo && <div style={{ fontSize: '8.5pt', color: C.cinza, marginBottom: 6 }}>{selectedProduct.propriedades_subtitulo}</div>}
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5pt', border: `1px solid ${C.borda}` }}>
-                  <thead>
-                    <tr style={{ background: '#111', color: '#fff' }}>
-                      <th style={{ textAlign: 'left', padding: '6px 9px', fontFamily: fontCond, fontWeight: 600, fontSize: '10.5pt', letterSpacing: '.06em', textTransform: 'uppercase', width: '44%' }}>Característica</th>
-                      <th style={{ textAlign: 'left', padding: '6px 9px', fontFamily: fontCond, fontWeight: 600, fontSize: '10.5pt', letterSpacing: '.06em', textTransform: 'uppercase', width: '34%' }}>Unidade</th>
-                      <th style={{ textAlign: 'left', padding: '6px 9px', fontFamily: fontCond, fontWeight: 600, fontSize: '10.5pt', letterSpacing: '.06em', textTransform: 'uppercase', width: '22%' }}>Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {composicao.map((row, i) => (
-                      <tr key={i} style={{ borderBottom: `1px solid ${C.linhaFina}`, background: i % 2 === 1 ? C.boxBg : 'transparent' }}>
-                        <td style={{ padding: '5px 9px', verticalAlign: 'top', color: C.cinzaEscuro }}>{row.item}</td>
-                        <td style={{ padding: '5px 9px', verticalAlign: 'top' }}>{row.unidade}</td>
-                        <td style={{ padding: '5px 9px', verticalAlign: 'top', fontWeight: 600 }}>{row.valor}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div style={{ fontSize: '7.5pt', color: '#8A9099', marginTop: 4, lineHeight: 1.35 }}>Valores típicos de laboratório, não constituem especificação de fornecimento.</div>
-              </>
-            )}
-
-            {(aplicacao.length > 0 || montagem.length > 0) && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8mm', marginTop: 11 }}>
-                {aplicacao.length > 0 && (
-                  <div>
-                    <TituloSecao sub="Application">Aplicação recomendada</TituloSecao>
-                    <ul style={{ margin: 0, paddingLeft: 15, fontSize: '9.5pt', lineHeight: 1.45, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      {aplicacao.map((item, i) => <li key={i}>{item}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {montagem.length > 0 && (
-                  <div>
-                    <TituloSecao sub="Mounting">Instruções de montagem</TituloSecao>
-                    <ol style={{ margin: 0, paddingLeft: 16, fontSize: '9.5pt', lineHeight: 1.45, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      {montagem.map((item, i) => <li key={i}>{item}</li>)}
-                    </ol>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {observ.length > 0 && (
-              <div style={{ marginTop: 11, border: `1px solid ${C.borda}`, borderLeft: `3px solid ${C.amarelo}`, background: C.notaBg, padding: '8px 11px' }}>
-                <div style={{ fontFamily: fontCond, fontWeight: 700, fontSize: '11.5pt', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 4 }}>
-                  Observações <span style={{ color: C.cinza, fontWeight: 500, textTransform: 'none' }}>/ Notes</span>
-                </div>
-                <ul style={{ margin: 0, paddingLeft: 15, fontSize: '9pt', lineHeight: 1.4, display: 'flex', flexDirection: 'column', gap: 2, color: C.cinzaEscuro }}>
-                  {observ.map((item, i) => <li key={i}>{item}</li>)}
-                </ul>
-              </div>
-            )}
-
-            {selectedProduct.garantia && (
-              <div style={{ fontSize: '9pt', color: C.cinza, marginTop: 11 }}><strong style={{ color: '#111' }}>Garantia:</strong> {selectedProduct.garantia}</div>
-            )}
-
-            <Rodape pagina={2} />
-          </section>
-        )}
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:#C9CDD3;border:1px solid #C9CDD3;margin-bottom:11px">
+        <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Cód. Vale</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.codvale || '—')}</div></div>
+        <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Cód. Kalenborn</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.codkalenborn || selectedProduct.id || '—')}</div></div>
+        <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">NCM</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.ncm || '—')}</div></div>
+        <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">IPI</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.ipi || '0')}%</div></div>
+        <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Unidade</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.um || 'UN')}</div></div>
       </div>
-    );
+
+      <div style="display:grid;grid-template-columns:74mm 1fr;gap:8mm;align-items:start">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="border:1px solid #C9CDD3;background:#FBFBFC;padding:4px">
+            <div style="width:100%;height:66mm;display:flex;align-items:center;justify-content:center;overflow:hidden">${imgProduto}</div>
+          </div>
+          <div style="font-size:8pt;color:#6B7280;line-height:1.35">Figura 1 — Vista isométrica do produto.</div>
+          ${camadasHtml}
+        </div>
+
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:3px;margin-bottom:7px">Descrição<span style="color:#8A9099;font-weight:500"> / Description</span></div>
+          <p style="margin:0;font-size:10.5pt;line-height:1.45;text-align:justify">${boldKeywords(selectedProduct.caracteristica || selectedProduct.descricao_original || 'Sem descrição cadastrada.')}</p>
+
+          ${propriedades.length > 0 ? `
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:3px;margin:13px 0 0">Características<span style="color:#8A9099;font-weight:500"> / Features</span></div>
+          <table style="width:100%;border-collapse:collapse;font-size:9.5pt;margin-top:4px">
+            <tbody>${featuresRows}</tbody>
+          </table>` : ''}
+        </div>
+      </div>
+
+      <div style="position:absolute;left:13mm;right:13mm;bottom:8mm;border-top:1px solid #C9CDD3;padding-top:5px;display:flex;justify-content:space-between;align-items:center;font-size:7.5pt;color:#6B7280;line-height:1.3">
+        <div><strong style="color:#111111">KALENBORN DO BRASIL LTDA</strong> · Estrada Antiga BH — Pedro Leopoldo, 1150, Galpão 03 · Vespasiano / MG<br>+55 31 3499-4000 · comercial@kalenborn.com.br · www.kalenborn.com.br</div>
+        <div style="text-align:right;white-space:nowrap">Página 1 de 2</div>
+      </div>
+    </section>`;
+
+    const pagina2 = `
+    <section class="page" style="position:relative;padding:12mm 13mm 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:297mm;page-break-before:always">
+      <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #111111;padding-bottom:6px;margin-bottom:11px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14pt;letter-spacing:.04em">${esc(nomeExibicao)}</div>
+        <div style="font-size:8.5pt;color:#6B7280;letter-spacing:.1em;text-transform:uppercase">Ficha Técnica · Cód. Vale ${esc(selectedProduct.codvale || '—')}</div>
+      </div>
+
+      ${composicao.length > 0 ? `
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5pt;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px">Propriedades do produto<span style="color:#8A9099;font-weight:500"> / Product properties</span></div>
+      ${selectedProduct.propriedades_subtitulo ? `<div style="font-size:8.5pt;color:#6B7280;margin-bottom:6px">${esc(selectedProduct.propriedades_subtitulo)}</div>` : ''}
+      <table style="width:100%;border-collapse:collapse;font-size:9.5pt;border:1px solid #C9CDD3">
+        <thead>
+          <tr style="background:#111111;color:#ffffff">
+            <th style="text-align:left;padding:6px 9px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:10.5pt;letter-spacing:.06em;text-transform:uppercase;width:44%">Característica</th>
+            <th style="text-align:left;padding:6px 9px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:10.5pt;letter-spacing:.06em;text-transform:uppercase;width:34%">Unidade</th>
+            <th style="text-align:left;padding:6px 9px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:10.5pt;letter-spacing:.06em;text-transform:uppercase;width:22%">Valor</th>
+          </tr>
+        </thead>
+        <tbody>${propsRows}</tbody>
+      </table>
+      <div style="font-size:7.5pt;color:#8A9099;margin-top:4px;line-height:1.35">Valores típicos de laboratório, não constituem especificação de fornecimento.</div>` : ''}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:11px">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:3px;margin-bottom:6px">Aplicação recomendada<span style="color:#8A9099;font-weight:500"> / Application</span></div>
+          <ul style="margin:0;padding-left:15px;font-size:9.5pt;line-height:1.45;display:flex;flex-direction:column;gap:3px">${liItems(aplicacao)}</ul>
+        </div>
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:3px;margin-bottom:6px">Instruções de montagem<span style="color:#8A9099;font-weight:500"> / Mounting</span></div>
+          <ol style="margin:0;padding-left:16px;font-size:9.5pt;line-height:1.45;display:flex;flex-direction:column;gap:3px">${liItems(montagem)}</ol>
+        </div>
+      </div>
+
+      <div style="margin-top:11px;border:1px solid #C9CDD3;border-left:3px solid #FFD200;background:#FAFAF6;padding:8px 11px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;letter-spacing:.07em;text-transform:uppercase;margin-bottom:4px">Observações<span style="color:#8A9099;font-weight:500"> / Notes</span></div>
+        <ul style="margin:0;padding-left:15px;font-size:9pt;line-height:1.4;display:flex;flex-direction:column;gap:2px;color:#3A3F46">${liItems(observ)}</ul>
+      </div>
+
+      ${selectedProduct.garantia ? `<div style="font-size:9pt;color:#6B7280;margin-top:11px"><strong style="color:#111111">Garantia:</strong> ${esc(selectedProduct.garantia)}</div>` : ''}
+
+      <div style="position:absolute;left:13mm;right:13mm;bottom:8mm;border-top:1px solid #C9CDD3;padding-top:5px;display:flex;justify-content:space-between;align-items:center;font-size:7.5pt;color:#6B7280;line-height:1.3">
+        <div><strong style="color:#111111">KALENBORN DO BRASIL LTDA</strong> · Estrada Antiga BH — Pedro Leopoldo, 1150, Galpão 03 · Vespasiano / MG<br>+55 31 3499-4000 · comercial@kalenborn.com.br · www.kalenborn.com.br</div>
+        <div style="text-align:right;white-space:nowrap">Página 2 de 2</div>
+      </div>
+    </section>`;
+
+    const separadorTela = `<div data-html2canvas-ignore="true" style="position:relative;height:0;border-top:2px dashed #94A3B8;margin:4px 0"><span style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:#fff;padding:0 12px;font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748B;text-transform:uppercase;white-space:nowrap">Fim da página 1 · Início da página 2</span></div>`;
+
+    return <div dangerouslySetInnerHTML={{ __html: pagina1 + separadorTela + pagina2 }} />;
   };
 
   return (
@@ -2921,7 +2874,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
               <button onClick={() => setIsListVisible(true)} className="lg:hidden bg-slate-300 hover:bg-slate-400 text-slate-800 font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer"><ChevronLeft size={18} /> Voltar</button>
               <button onClick={handleDownload} disabled={isGenerating} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer ml-auto">{isGenerating ? <RefreshCw className="animate-spin" size={18} /> : <Download size={18} />} Baixar PDF</button>
             </div>
-            <div className="bg-white shadow-2xl mb-10 shrink-0 box-border" style={{ width: '210mm', minHeight: '297mm', padding: '12mm 13mm 18mm' }} id="ficha-tecnica-pdf-real">{renderFicha()}</div>
+            <div className="bg-white shadow-2xl mb-10 shrink-0 box-border" style={{ width: '210mm' }} id="ficha-tecnica-pdf-real">{renderFicha()}</div>
           </>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-slate-400"><Layers size={48} className="mb-4 opacity-50" /><p>Selecione uma peça na lista.</p></div>
