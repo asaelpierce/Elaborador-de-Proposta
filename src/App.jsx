@@ -2815,6 +2815,13 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
           <Rodape pagina={1} />
         </section>
 
+        {/* Marcador visual de quebra de página — só aparece na tela, o PDF ignora (data-html2canvas-ignore) */}
+        {temPagina2 && (
+          <div data-html2canvas-ignore="true" style={{ position: 'relative', height: 0, borderTop: '2px dashed #94A3B8', margin: '4px 0' }}>
+            <span style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', background: '#fff', padding: '0 12px', fontSize: 9, fontWeight: 700, letterSpacing: '.08em', color: '#64748B', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Fim da página 1 · Início da página 2</span>
+          </div>
+        )}
+
         {/* ===== PÁGINA 2 ===== */}
         {temPagina2 && (
           <section style={{ position: 'relative', minHeight: '267mm', boxSizing: 'border-box', pageBreakBefore: 'always', marginTop: '15mm' }}>
