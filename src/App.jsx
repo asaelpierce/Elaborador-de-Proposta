@@ -2675,11 +2675,43 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     const manualProps = Array.isArray(selectedProduct.propriedades_material) ? selectedProduct.propriedades_material : [];
     const propriedades = manualProps.length > 0 ? manualProps : parseFeaturesFromText(selectedProduct.caracteristica || '');
     const camadas = Array.isArray(selectedProduct.camadas_construcao) ? selectedProduct.camadas_construcao : [];
-    const aplicacao = (Array.isArray(selectedProduct.aplicacao_recomendada) ? selectedProduct.aplicacao_recomendada : []).filter(Boolean);
-    const montagem = (Array.isArray(selectedProduct.instrucoes_montagem) ? selectedProduct.instrucoes_montagem : []).filter(Boolean);
-    const observ = (Array.isArray(selectedProduct.observacoes) ? selectedProduct.observacoes : []).filter(Boolean);
+
+    const fixacaoRow = propriedades.find(r => /fixa[çc][ãa]o/i.test(r.caracteristica || ''))?.valor;
+    const desenhoRow = propriedades.find(r => /desenho de refer[êe]ncia/i.test(r.caracteristica || ''))?.valor;
+
+    // Textos padrão da Página 2 — sempre os mesmos em todo produto (igual ao modelo),
+    // a não ser que o produto tenha um texto próprio cadastrado.
+    const aplicacaoDefault = [
+      'Revestimento de chutes, calhas e caixas de transferência sujeitos a impacto de minério.',
+      'Pontos de queda com material granulado e abrasivo, com temperatura de superfície até 80 °C.',
+      'Áreas onde a borracha isolada não resiste à abrasão e a cerâmica isolada não absorve o impacto.',
+      'Substituição direta de chapas de desgaste metálicas, com redução de peso e de ruído operacional.'
+    ];
+    const montagemDefault = [
+      'Limpar a superfície do equipamento, removendo material aderido, rebarbas e cordões de solda.',
+      desenhoRow ? `Conferir a posição dos furos conforme o desenho ${desenhoRow}.` : 'Conferir a posição dos furos conforme o desenho técnico do equipamento.',
+      'Posicionar a chapa com a face cerâmica voltada para o fluxo de material.',
+      fixacaoRow ? `Montar o kit de fixação: ${fixacaoRow}.` : 'Montar o kit de fixação (prisioneiro, arruela e porca) conforme especificação técnica.',
+      'Apertar as porcas em sequência cruzada, sem sobreaperto do coxim de borracha.',
+      'Montar as chapas adjacentes com junta fechada, evitando frestas expostas ao fluxo.'
+    ];
+    const observacoesDefault = [
+      'A temperatura máxima de operação é limitada pela borracha de vulcanização, não pela cerâmica.',
+      'Não soldar, cortar ou furar a chapa após a vulcanização; qualquer adequação deve ser solicitada à Kalenborn.',
+      'Impactos concentrados de blocos acima do dimensionado podem trincar as pastilhas cerâmicas — avaliar a granulometria antes da aplicação.',
+      'Peso e demais dados de embalagem sob consulta ao departamento comercial.'
+    ];
+
+    const customAplicacao = (Array.isArray(selectedProduct.aplicacao_recomendada) ? selectedProduct.aplicacao_recomendada : []).filter(Boolean);
+    const customMontagem = (Array.isArray(selectedProduct.instrucoes_montagem) ? selectedProduct.instrucoes_montagem : []).filter(Boolean);
+    const customObserv = (Array.isArray(selectedProduct.observacoes) ? selectedProduct.observacoes : []).filter(Boolean);
+
+    const aplicacao = customAplicacao.length > 0 ? customAplicacao : aplicacaoDefault;
+    const montagem = customMontagem.length > 0 ? customMontagem : montagemDefault;
+    const observ = customObserv.length > 0 ? customObserv : observacoesDefault;
+
     const nomeExibicao = (selectedProduct.name || selectedProduct.codkalenborn || selectedProduct.id || '').toUpperCase();
-    const temPagina2 = composicao.length > 0 || aplicacao.length > 0 || montagem.length > 0 || observ.length > 0;
+    const temPagina2 = true;
 
     const C = { azul: '#1B3A6B', amarelo: '#FFD200', borda: '#C9CDD3', boxBg: '#F5F6F7', cinza: '#6B7280', cinzaEscuro: '#3A3F46', linhaFina: '#E4E6E9', notaBg: '#FAFAF6' };
     const fontCond = "'Barlow Condensed', 'Helvetica Neue', Arial, sans-serif";
