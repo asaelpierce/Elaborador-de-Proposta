@@ -2632,6 +2632,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedId, setSelectedId] = useState(initialSelectedId || '');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [mostrarCodVale, setMostrarCodVale] = useState(true);
   const [isListVisible, setIsListVisible] = useState(true);
 
   const eligibleProducts = useMemo(() => {
@@ -2768,11 +2769,10 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
         <div style="font-size:9.5pt;color:#6B7280;white-space:nowrap">${esc(subtituloTexto)}</div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:#C9CDD3;border:1px solid #C9CDD3;margin-bottom:11px">
-        <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Cód. Vale</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.codvale || '—')}</div></div>
+      <div style="display:grid;grid-template-columns:repeat(${mostrarCodVale ? 4 : 3},1fr);gap:1px;background:#C9CDD3;border:1px solid #C9CDD3;margin-bottom:11px">
+        ${mostrarCodVale ? `<div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Cód. Vale</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.codvale || '—')}</div></div>` : ''}
         <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Cód. Kalenborn</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.codkalenborn || selectedProduct.id || '—')}</div></div>
         <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">NCM</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.ncm || '—')}</div></div>
-        <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">IPI</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.ipi || '0')}%</div></div>
         <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Unidade</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.um || 'UN')}</div></div>
       </div>
 
@@ -2807,7 +2807,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     <section class="page" style="position:relative;padding:12mm 13mm 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:297mm;page-break-before:always">
       <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #111111;padding-bottom:6px;margin-bottom:11px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14pt;letter-spacing:.04em">${esc(nomeExibicao)}</div>
-        <div style="font-size:8.5pt;color:#6B7280;letter-spacing:.1em;text-transform:uppercase">Ficha Técnica · Cód. Vale ${esc(selectedProduct.codvale || '—')}</div>
+        <div style="font-size:8.5pt;color:#6B7280;letter-spacing:.1em;text-transform:uppercase">Ficha Técnica${mostrarCodVale ? ` · Cód. Vale ${esc(selectedProduct.codvale || '—')}` : ''}</div>
       </div>
 
       ${composicao.length > 0 ? `
@@ -2870,8 +2870,12 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
       <div className="flex-1 flex flex-col items-center overflow-auto p-8 custom-scrollbar bg-slate-200 relative z-10">
         {selectedProduct ? (
           <>
-            <div className="w-full max-w-[210mm] flex justify-between mb-4">
+            <div className="w-full max-w-[210mm] flex items-center justify-between mb-4 gap-3">
               <button onClick={() => setIsListVisible(true)} className="lg:hidden bg-slate-300 hover:bg-slate-400 text-slate-800 font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer"><ChevronLeft size={18} /> Voltar</button>
+              <label className="hidden sm:flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3.5 py-2.5 shadow-sm cursor-pointer select-none">
+                <input type="checkbox" checked={mostrarCodVale} onChange={e => setMostrarCodVale(e.target.checked)} className="w-4 h-4 accent-blue-600 cursor-pointer" />
+                <span className="text-xs font-bold text-slate-600">Mostrar Cód. Vale</span>
+              </label>
               <button onClick={handleDownload} disabled={isGenerating} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer ml-auto">{isGenerating ? <RefreshCw className="animate-spin" size={18} /> : <Download size={18} />} Baixar PDF</button>
             </div>
             <div className="bg-white shadow-2xl mb-10 shrink-0 box-border" style={{ width: '210mm' }} id="ficha-tecnica-pdf-real">{renderFicha()}</div>
