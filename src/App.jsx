@@ -3204,32 +3204,34 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
     // ---------- CAPA ----------
     const capa = `
     <section style="position:relative;width:210mm;height:297mm;box-sizing:border-box;background:#111111;color:#fff;font-family:${F};overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact">
-      <div style="padding:18mm 16mm 0 16mm;display:flex;justify-content:space-between;align-items:flex-start;gap:10mm">
-        <div style="display:flex;flex-direction:column;gap:2mm">
-          <div style="font-size:15pt;font-weight:700;letter-spacing:0.18em;text-transform:uppercase">Kalenborn</div>
-          <div style="font-size:7.5pt;letter-spacing:0.22em;text-transform:uppercase;color:#FFD100">Wear protection · Proteção contra desgaste</div>
+      <div style="height:100%;display:flex;flex-direction:column">
+        <div style="padding:18mm 16mm 0 16mm;display:flex;justify-content:space-between;align-items:flex-start;gap:10mm;flex-shrink:0">
+          <div style="display:flex;flex-direction:column;gap:2mm">
+            <div style="font-size:15pt;font-weight:700;letter-spacing:0.18em;text-transform:uppercase">Kalenborn</div>
+            <div style="font-size:7.5pt;letter-spacing:0.22em;text-transform:uppercase;color:#FFD100">Wear protection · Proteção contra desgaste</div>
+          </div>
+          <div style="text-align:right;font-size:7.5pt;letter-spacing:0.2em;text-transform:uppercase;color:#A3A3A3;line-height:1.8">
+            <div>Estudo de caso</div>
+            <div style="color:#6E6E6E">Case study</div>
+          </div>
         </div>
-        <div style="text-align:right;font-size:7.5pt;letter-spacing:0.2em;text-transform:uppercase;color:#A3A3A3;line-height:1.8">
-          <div>Estudo de caso</div>
-          <div style="color:#6E6E6E">Case study</div>
+
+        <div style="padding:14mm 16mm 10mm 16mm;display:flex;flex-direction:column;gap:6mm;flex-shrink:0">
+          <div style="width:22mm;height:1.6mm;background:#FFD100"></div>
+          <div style="font-size:9pt;letter-spacing:0.2em;text-transform:uppercase;color:#A3A3A3">Cliente</div>
+          <div style="font-size:15pt;font-weight:600;letter-spacing:0.01em;margin-top:-3mm">${esc(form.cliente || 'Nome do cliente')}</div>
+          <h1 style="margin:2mm 0 0 0;font-size:30pt;line-height:1.12;font-weight:700;letter-spacing:-0.015em;max-width:150mm">${esc(form.titulo || 'Título do projeto de aplicação')}</h1>
+          <p style="margin:0;font-size:11pt;line-height:1.55;color:#D6D6D6;max-width:130mm">${esc(form.resumo || 'Uma linha de resumo do desafio e da solução aplicada — componente, material de revestimento e resultado obtido.')}</p>
         </div>
-      </div>
 
-      <div style="padding:14mm 16mm 10mm 16mm;display:flex;flex-direction:column;gap:6mm">
-        <div style="width:22mm;height:1.6mm;background:#FFD100"></div>
-        <div style="font-size:9pt;letter-spacing:0.2em;text-transform:uppercase;color:#A3A3A3">Cliente</div>
-        <div style="font-size:15pt;font-weight:600;letter-spacing:0.01em;margin-top:-3mm">${esc(form.cliente || 'Nome do cliente')}</div>
-        <h1 style="margin:2mm 0 0 0;font-size:30pt;line-height:1.12;font-weight:700;letter-spacing:-0.015em;max-width:150mm">${esc(form.titulo || 'Título do projeto de aplicação')}</h1>
-        <p style="margin:0;font-size:11pt;line-height:1.55;color:#D6D6D6;max-width:130mm">${esc(form.resumo || 'Uma linha de resumo do desafio e da solução aplicada — componente, material de revestimento e resultado obtido.')}</p>
-      </div>
-
-      <div style="position:absolute;left:0;right:0;top:95mm;bottom:0">
-        ${imgOrPlaceholder(fotos.capa, 'Foto principal da aplicação (paisagem)')}
-        <div style="position:absolute;left:0;right:0;bottom:0;padding:8mm 16mm 8mm 16mm;background:linear-gradient(to top,rgba(0,0,0,0.9),rgba(0,0,0,0));pointer-events:none;display:grid;grid-template-columns:repeat(4,1fr);gap:6mm">
-          <div><div style="font-size:6.5pt;letter-spacing:0.18em;text-transform:uppercase;color:#A3A3A3">Segmento</div><div style="font-size:9.5pt;font-weight:600;margin-top:1.5mm;color:#fff">${val(form.industry)}</div></div>
-          <div><div style="font-size:6.5pt;letter-spacing:0.18em;text-transform:uppercase;color:#A3A3A3">Componente</div><div style="font-size:9.5pt;font-weight:600;margin-top:1.5mm;color:#fff">${val(form.component)}</div></div>
-          <div><div style="font-size:6.5pt;letter-spacing:0.18em;text-transform:uppercase;color:#A3A3A3">Responsável</div><div style="font-size:9.5pt;font-weight:600;margin-top:1.5mm;color:#fff">${val(form.autor)}</div></div>
-          <div><div style="font-size:6.5pt;letter-spacing:0.18em;text-transform:uppercase;color:#A3A3A3">Ref. Kalenborn</div><div style="font-size:9.5pt;font-weight:600;margin-top:1.5mm;color:#fff">${val(form.kalenborn_reference)}</div></div>
+        <div id="capa-foto-area" style="flex:1;position:relative;min-height:0">
+          ${imgOrPlaceholder(fotos.capa, 'Foto principal da aplicação (paisagem)')}
+          <div style="position:absolute;left:0;right:0;bottom:0;padding:8mm 16mm 8mm 16mm;background:linear-gradient(to top,rgba(0,0,0,0.9),rgba(0,0,0,0));pointer-events:none;display:grid;grid-template-columns:repeat(4,1fr);gap:6mm">
+            <div><div style="font-size:6.5pt;letter-spacing:0.18em;text-transform:uppercase;color:#A3A3A3">Segmento</div><div style="font-size:9.5pt;font-weight:600;margin-top:1.5mm;color:#fff">${val(form.industry)}</div></div>
+            <div><div style="font-size:6.5pt;letter-spacing:0.18em;text-transform:uppercase;color:#A3A3A3">Componente</div><div style="font-size:9.5pt;font-weight:600;margin-top:1.5mm;color:#fff">${val(form.component)}</div></div>
+            <div><div style="font-size:6.5pt;letter-spacing:0.18em;text-transform:uppercase;color:#A3A3A3">Responsável</div><div style="font-size:9.5pt;font-weight:600;margin-top:1.5mm;color:#fff">${val(form.autor)}</div></div>
+            <div><div style="font-size:6.5pt;letter-spacing:0.18em;text-transform:uppercase;color:#A3A3A3">Ref. Kalenborn</div><div style="font-size:9.5pt;font-weight:600;margin-top:1.5mm;color:#fff">${val(form.kalenborn_reference)}</div></div>
+          </div>
         </div>
       </div>
     </section>`;
@@ -3364,6 +3366,21 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
     return { capa, pagina01, pagina02, pagina03 };
   };
 
+  // Espera todas as imagens de um container carregarem de verdade antes de
+  // tirar o "print" — evita fotos quebradas/em branco no PDF por causa de
+  // rede lenta (fotos vêm do Supabase Storage, às vezes demoram a carregar).
+  const esperarImagens = (container) => {
+    const imgs = Array.from(container.querySelectorAll('img'));
+    return Promise.all(imgs.map(img => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise(resolve => {
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+        setTimeout(resolve, 8000);
+      });
+    }));
+  };
+
   const handleDownloadPdf = async () => {
     // Gera cada página isoladamente e monta o PDF manualmente, usando a mesma
     // função html2pdf já usada no resto do app — evita o corte automático de
@@ -3376,6 +3393,21 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
         const idsPaginas = ['case-study-page-0-capa', 'case-study-page-1', 'case-study-page-2', 'case-study-page-3'];
         const elementos = idsPaginas.map(id => document.getElementById(id)).filter(Boolean);
         if (elementos.length === 0) throw new Error('Nada para exportar.');
+
+        // Espera as imagens de todas as páginas carregarem antes de capturar qualquer uma
+        await Promise.all(elementos.map(esperarImagens));
+
+        // Na capa, trava a altura real da foto com base no que o texto realmente
+        // ocupou (em vez de confiar no navegador calcular isso sozinho na hora
+        // do print) — evita a foto sobrepor o título quando ele quebra linha.
+        const areaFoto = document.getElementById('capa-foto-area');
+        if (areaFoto && elementos[0]) {
+          await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const alturaTotal = elementos[0].getBoundingClientRect().height;
+          const topoFoto = areaFoto.getBoundingClientRect().top - elementos[0].getBoundingClientRect().top;
+          areaFoto.style.flex = 'none';
+          areaFoto.style.height = `${Math.max(alturaTotal - topoFoto, 0)}px`;
+        }
 
         // A primeira página vira a base do PDF. Às vezes o html2pdf, por
         // arredondamento de altura, cria sozinho uma 2ª página quase em
