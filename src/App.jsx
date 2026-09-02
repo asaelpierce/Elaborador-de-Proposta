@@ -3236,7 +3236,7 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
 
     // ---------- 01 · O PROJETO ----------
     const pagina01 = `
-    <section style="position:relative;width:210mm;height:297mm;box-sizing:border-box;background:#fff;color:#111111;font-family:${F};padding:16mm 16mm 12mm 16mm;page-break-before:always">
+    <section style="position:relative;width:210mm;height:297mm;box-sizing:border-box;background:#fff;color:#111111;font-family:${F};padding:16mm 16mm 12mm 16mm">
       <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.2mm solid #111111;padding-bottom:4mm">
         <div style="display:flex;align-items:baseline;gap:5mm">
           <span style="font-size:9.5pt;font-weight:700;color:#111111;background:#FFD100;padding:1.4mm 2.6mm">01</span>
@@ -3293,7 +3293,7 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
       </div>`;
 
     const pagina02 = `
-    <section style="position:relative;width:210mm;height:297mm;box-sizing:border-box;background:#fff;color:#111111;font-family:${F};padding:16mm 16mm 12mm 16mm;page-break-before:always">
+    <section style="position:relative;width:210mm;height:297mm;box-sizing:border-box;background:#fff;color:#111111;font-family:${F};padding:16mm 16mm 12mm 16mm">
       <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.2mm solid #111111;padding-bottom:4mm">
         <div style="display:flex;align-items:baseline;gap:5mm">
           <span style="font-size:9.5pt;font-weight:700;color:#111111;background:#FFD100;padding:1.4mm 2.6mm">02</span>
@@ -3338,7 +3338,7 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
       </div>`;
 
     const pagina03 = `
-    <section style="position:relative;width:210mm;height:297mm;box-sizing:border-box;background:#fff;color:#111111;font-family:${F};padding:16mm 16mm 12mm 16mm;page-break-before:always">
+    <section style="position:relative;width:210mm;height:297mm;box-sizing:border-box;background:#fff;color:#111111;font-family:${F};padding:16mm 16mm 12mm 16mm">
       <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.2mm solid #111111;padding-bottom:4mm">
         <div style="display:flex;align-items:baseline;gap:5mm">
           <span style="font-size:9.5pt;font-weight:700;color:#111111;background:#FFD100;padding:1.4mm 2.6mm">03</span>
@@ -3361,18 +3361,39 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
       ${rodape('03')}
     </section>`;
 
-    return capa + pagina01 + pagina02 + pagina03;
+    return { capa, pagina01, pagina02, pagina03 };
   };
 
   const handleDownloadPdf = async () => {
-    if (!window.html2pdf) return;
+    // Gera cada página isoladamente e monta o PDF manualmente, usando a mesma
+    // função html2pdf já usada no resto do app — evita o corte automático de
+    // páginas (que causava as páginas em branco por erro de arredondamento mm/pixel).
+    if (!window.html2pdf) { showToast('Biblioteca de PDF ainda não carregou, tenta de novo em alguns segundos.'); return; }
     setIsGenerating(true);
     setTimeout(async () => {
-      const el = document.getElementById('case-study-pdf-real');
-      const opt = { margin: 0, filename: `Estudo_Caso_${(form.cliente || form.titulo || 'projeto').replace(/\s+/g, '_')}.pdf`, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css'] } };
-      try { await window.html2pdf().set(opt).from(el).save(); showToast('Estudo de caso baixado!'); }
-      catch (e) { showToast('Erro ao gerar PDF.'); }
-      finally { setIsGenerating(false); }
+      try {
+        const opt = { margin: 0, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
+        const idsPaginas = ['case-study-page-0-capa', 'case-study-page-1', 'case-study-page-2', 'case-study-page-3'];
+        const elementos = idsPaginas.map(id => document.getElementById(id)).filter(Boolean);
+        if (elementos.length === 0) throw new Error('Nada para exportar.');
+
+        // A primeira página vira a base do PDF
+        const pdf = await window.html2pdf().set(opt).from(elementos[0]).toPdf().get('pdf');
+
+        // As demais entram como páginas novas no mesmo documento
+        for (let i = 1; i < elementos.length; i++) {
+          const canvas = await window.html2pdf().set(opt).from(elementos[i]).toCanvas().get('canvas');
+          pdf.addPage();
+          pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 210, 297);
+        }
+
+        pdf.save(`Estudo_Caso_${(form.cliente || form.titulo || 'projeto').replace(/\s+/g, '_')}.pdf`);
+        showToast('Estudo de caso baixado!');
+      } catch (e) {
+        showToast('Erro ao gerar PDF.');
+      } finally {
+        setIsGenerating(false);
+      }
     }, 100);
   };
 
@@ -3530,7 +3551,14 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
       </div>
 
       <div style={{ position: 'fixed', top: 0, left: '-99999px', width: '210mm' }}>
-        <div id="case-study-pdf-real" dangerouslySetInnerHTML={{ __html: gerarHtmlEstudo() }} />
+        {(() => { const paginas = gerarHtmlEstudo(); return (
+          <>
+            <div id="case-study-page-0-capa" style={{ width: '210mm', height: '297mm', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: paginas.capa }} />
+            <div id="case-study-page-1" style={{ width: '210mm', height: '297mm', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: paginas.pagina01 }} />
+            <div id="case-study-page-2" style={{ width: '210mm', height: '297mm', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: paginas.pagina02 }} />
+            <div id="case-study-page-3" style={{ width: '210mm', height: '297mm', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: paginas.pagina03 }} />
+          </>
+        ); })()}
       </div>
     </div>
   );
