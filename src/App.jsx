@@ -3377,8 +3377,13 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
         const elementos = idsPaginas.map(id => document.getElementById(id)).filter(Boolean);
         if (elementos.length === 0) throw new Error('Nada para exportar.');
 
-        // A primeira página vira a base do PDF
+        // A primeira página vira a base do PDF. Às vezes o html2pdf, por
+        // arredondamento de altura, cria sozinho uma 2ª página quase em
+        // branco — removemos qualquer página extra antes de continuar.
         const pdf = await window.html2pdf().set(opt).from(elementos[0]).toPdf().get('pdf');
+        while (pdf.internal.getNumberOfPages() > 1) {
+          pdf.deletePage(pdf.internal.getNumberOfPages());
+        }
 
         // As demais entram como páginas novas no mesmo documento
         for (let i = 1; i < elementos.length; i++) {
