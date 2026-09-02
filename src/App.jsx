@@ -2915,14 +2915,53 @@ function SettingsView({ showToast, setCustomLogo, currentLogo, refreshData, open
 // ==========================================
 // ESTUDO DE CASO — gravação de voz por campo, transcrição automática, fotos e geração de documento
 // ==========================================
+function CampoComMic({ fieldKey, label, labelPt, multiline, form, setForm, recordingField, transcribingField, startRecording, stopRecording }) {
+  const gravando = recordingField === fieldKey;
+  const transcrevendo = transcribingField === fieldKey;
+  const Comp = multiline ? 'textarea' : 'input';
+  return (
+    <div>
+      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">{label} <span className="font-normal normal-case text-slate-400">/ {labelPt}</span></label>
+      <div className="flex items-start gap-2">
+        <Comp
+          {...(multiline ? { rows: 3 } : { type: 'text' })}
+          value={form[fieldKey] || ''}
+          onChange={e => setForm(f => ({ ...f, [fieldKey]: e.target.value }))}
+          placeholder="-"
+          className="flex-1 px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none resize-y"
+        />
+        <button
+          type="button"
+          disabled={transcrevendo}
+          onClick={() => gravando ? stopRecording() : startRecording(fieldKey)}
+          className={`w-10 h-10 shrink-0 rounded-lg flex items-center justify-center transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait ${gravando ? 'bg-rose-500 text-white animate-pulse' : 'bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white'}`}
+          title={gravando ? 'Parar gravação' : transcrevendo ? 'Transcrevendo...' : 'Gravar áudio e transcrever'}
+        >
+          {transcrevendo ? <RefreshCw size={16} className="animate-spin" /> : gravando ? <MicOff size={16} /> : <Mic size={16} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// ESTUDO DE CASO — gravação de voz por campo, transcrição automática,
+// fotos em slots nomeados + mídias extras (inclusive vídeo), rascunho
+// com IA e geração do documento final (4 páginas, igual ao modelo).
+// ==========================================
 function CaseStudyView({ customLogo, showToast, apiKey, setActiveTab }) {
   const emptyForm = {
-    id: '', titulo: '', cliente: '', autor: '', internal_use_only: true,
+    id: '', titulo: '', cliente: '', resumo: '', autor: '', internal_use_only: true,
     industry: '', industry_detail: '', component: '', conveying_material: '',
     conveying_speed: '', lining_material: '', lining_material_thickness: '',
     base_material: '', fixing_system: '', wear: '', application_temperature: '',
     corrosion: '', dimension: '', area_to_be_lined: '', kalenborn_reference: '',
-    miscellaneous: '', description: '', fotos: []
+    miscellaneous: '', description: '',
+    resultado_vida_util: '', resultado_reducao_paradas: '', resultado_ganho_operacional: '',
+    legenda_foto_solucao: '',
+    fotos: { capa: null, solucao: null, antes: null, durante: null, depois: null },
+    midias_extra: [],
+    status: 'rascunho'
   };
 
   const [caseStudies, setCaseStudies] = useState([]);
@@ -2932,10 +2971,10 @@ function CaseStudyView({ customLogo, showToast, apiKey, setActiveTab }) {
   const [transcribingField, setTranscribingField] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isDraftingAI, setIsDraftingAI] = useState(false);
   const [lang, setLang] = useState('pt');
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
-  const streamRef = useRef(null);
 
   const carregarLista = async () => {
     try {
@@ -2945,8 +2984,13 @@ function CaseStudyView({ customLogo, showToast, apiKey, setActiveTab }) {
   };
   useEffect(() => { carregarLista(); }, []);
 
-  const novoEstudo = () => { setForm({ ...emptyForm, id: crypto.randomUUID() }); if (window.innerWidth < 1024) setIsListVisible(false); };
-  const abrirEstudo = (cs) => { setForm({ ...emptyForm, ...cs, fotos: Array.isArray(cs.fotos) ? cs.fotos : [] }); if (window.innerWidth < 1024) setIsListVisible(false); };
+  const garantirFotosObjeto = (fotos) => {
+    if (Array.isArray(fotos) || !fotos) return { capa: null, solucao: null, antes: null, durante: null, depois: null };
+    return { capa: null, solucao: null, antes: null, durante: null, depois: null, ...fotos };
+  };
+
+  const novoEstudo = () => { setForm({ ...emptyForm, id: crypto.randomUUID(), fotos: { ...emptyForm.fotos } }); if (window.innerWidth < 1024) setIsListVisible(false); };
+  const abrirEstudo = (cs) => { setForm({ ...emptyForm, ...cs, fotos: garantirFotosObjeto(cs.fotos), midias_extra: Array.isArray(cs.midias_extra) ? cs.midias_extra : [] }); if (window.innerWidth < 1024) setIsListVisible(false); };
 
   // Grava o áudio de verdade (funciona em iPhone/Android/qualquer navegador)
   // e manda pra transcrição via API — em vez do reconhecimento de voz nativo
@@ -2955,7 +2999,6 @@ function CaseStudyView({ customLogo, showToast, apiKey, setActiveTab }) {
     if (!apiKey) { showToast('Configure a chave da OpenAI em Configurações antes de gravar.'); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
       const tiposPossiveis = ['audio/mp4', 'audio/webm', 'audio/ogg'];
       const mimeType = tiposPossiveis.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
@@ -2993,17 +3036,11 @@ function CaseStudyView({ customLogo, showToast, apiKey, setActiveTab }) {
         headers: { Authorization: `Bearer ${apiKey}` },
         body: formData
       });
-      if (!resp.ok) {
-        const errBody = await resp.text();
-        throw new Error(errBody);
-      }
+      if (!resp.ok) { const errBody = await resp.text(); throw new Error(errBody); }
       const data = await resp.json();
       const texto = (data.text || '').trim();
-      if (texto) {
-        setForm(f => ({ ...f, [fieldKey]: (f[fieldKey] ? f[fieldKey] + ' ' : '') + texto }));
-      } else {
-        showToast('Não entendi o áudio, tente de novo.');
-      }
+      if (texto) setForm(f => ({ ...f, [fieldKey]: (f[fieldKey] ? f[fieldKey] + ' ' : '') + texto }));
+      else showToast('Não entendi o áudio, tente de novo.');
     } catch (err) {
       showToast('Erro ao transcrever o áudio. Confira a chave da OpenAI em Configurações.');
     } finally {
@@ -3011,21 +3048,95 @@ function CaseStudyView({ customLogo, showToast, apiKey, setActiveTab }) {
     }
   };
 
-  const handlePhotoUpload = async (e) => {
+  // ===== Fotos em slots nomeados (capa, solução, antes, durante, depois) =====
+  const handleSlotFotoUpload = async (slotKey, file) => {
+    if (!file) return;
+    const idBase = form.id || crypto.randomUUID();
+    if (!form.id) setForm(f => ({ ...f, id: idBase }));
+    try {
+      const fileName = `case-studies/${idBase}/${slotKey}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+      const url = await supabaseUpload('portal-files', fileName, file);
+      setForm(f => ({ ...f, fotos: { ...f.fotos, [slotKey]: { url } } }));
+    } catch (err) { showToast('Erro ao enviar foto.'); }
+  };
+  const removerSlotFoto = (slotKey) => setForm(f => ({ ...f, fotos: { ...f.fotos, [slotKey]: null } }));
+
+  // ===== Mídias extras — fotos ou vídeos complementares (não entram no PDF, ficam no registro do projeto) =====
+  const handleExtraUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     const idBase = form.id || crypto.randomUUID();
     if (!form.id) setForm(f => ({ ...f, id: idBase }));
     for (const file of files) {
       try {
-        const fileName = `case-studies/${idBase}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+        const fileName = `case-studies/${idBase}/extra_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
         const url = await supabaseUpload('portal-files', fileName, file);
-        setForm(f => ({ ...f, fotos: [...f.fotos, { url }] }));
-      } catch (err) { showToast('Erro ao enviar foto.'); }
+        const tipo = file.type.startsWith('video') ? 'video' : 'imagem';
+        setForm(f => ({ ...f, midias_extra: [...f.midias_extra, { url, tipo, nome: file.name }] }));
+      } catch (err) { showToast('Erro ao enviar mídia.'); }
     }
     e.target.value = '';
   };
-  const removerFoto = (idx) => setForm(f => ({ ...f, fotos: f.fotos.filter((_, i) => i !== idx) }));
+  const removerExtra = (idx) => setForm(f => ({ ...f, midias_extra: f.midias_extra.filter((_, i) => i !== idx) }));
+
+  // ===== Rascunho com IA — adianta o texto do vendedor a partir dos dados já preenchidos =====
+  const handleGerarRascunhoIA = async () => {
+    if (!apiKey) { showToast('Configure a chave da OpenAI em Configurações para usar a IA.'); return; }
+    const temDados = ['industry', 'component', 'conveying_material', 'description', 'miscellaneous', 'wear', 'corrosion', 'dimension'].some(k => form[k]);
+    if (!temDados) { showToast('Preencha ou grave algumas respostas antes de gerar o rascunho.'); return; }
+    setIsDraftingAI(true);
+    try {
+      const prompt = `Você é um redator técnico da Kalenborn (proteção contra desgaste industrial). Com base nas respostas brutas abaixo (podem estar incompletas, em fragmentos de fala transcrita, ou em inglês/português misturado), escreva um rascunho profissional e conciso para um Estudo de Caso comercial em português do Brasil.
+
+Dados brutos do projeto:
+- Cliente: ${form.cliente || '(não informado)'}
+- Segmento (industry): ${form.industry || '-'}
+- Detalhe do segmento: ${form.industry_detail || '-'}
+- Componente: ${form.component || '-'}
+- Material transportado: ${form.conveying_material || '-'}
+- Velocidade de transporte: ${form.conveying_speed || '-'}
+- Temperatura de aplicação: ${form.application_temperature || '-'}
+- Tipo de desgaste: ${form.wear || '-'}
+- Corrosão: ${form.corrosion || '-'}
+- Dimensão: ${form.dimension || '-'}
+- Área a revestir: ${form.area_to_be_lined || '-'}
+- Material de revestimento aplicado: ${form.lining_material || '-'}
+- Espessura do revestimento: ${form.lining_material_thickness || '-'}
+- Material da base: ${form.base_material || '-'}
+- Sistema de fixação: ${form.fixing_system || '-'}
+- Descrição (bruta/falada): ${form.description || '-'}
+- Observações gerais (brutas/faladas): ${form.miscellaneous || '-'}
+
+Responda SOMENTE em JSON válido, sem markdown, com exatamente estas chaves:
+{
+  "titulo": "título curto e comercial do projeto de aplicação (até 8 palavras)",
+  "resumo": "uma frase de resumo do desafio e da solução (até 25 palavras)",
+  "descricao": "parágrafo de 3 a 5 frases descrevendo o contexto da aplicação, o desgaste histórico e o que o cliente precisava resolver",
+  "observacoes": "parágrafo curto (2 a 3 frases) com detalhes de execução, prazo de montagem ou recomendações",
+  "resultado_vida_util": "frase curta com a vida útil estimada do revestimento (ou deixe vazio se não houver dado)",
+  "resultado_reducao_paradas": "frase curta sobre redução de paradas de manutenção (ou vazio)",
+  "resultado_ganho_operacional": "frase curta sobre ganho operacional observado (ou vazio)"
+}
+Não invente números que não foram informados — nesses casos, escreva uma frase qualitativa razoável ou deixe o campo vazio.`;
+      const respostaTexto = await askChatGPT(prompt, apiKey, true);
+      const json = JSON.parse(respostaTexto);
+      setForm(f => ({
+        ...f,
+        titulo: json.titulo || f.titulo,
+        resumo: json.resumo || f.resumo,
+        description: json.descricao || f.description,
+        miscellaneous: json.observacoes || f.miscellaneous,
+        resultado_vida_util: json.resultado_vida_util || f.resultado_vida_util,
+        resultado_reducao_paradas: json.resultado_reducao_paradas || f.resultado_reducao_paradas,
+        resultado_ganho_operacional: json.resultado_ganho_operacional || f.resultado_ganho_operacional,
+      }));
+      showToast('✅ Rascunho gerado pela IA — revise antes de exportar!');
+    } catch (err) {
+      showToast('Erro ao gerar rascunho com IA.');
+    } finally {
+      setIsDraftingAI(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -3058,104 +3169,201 @@ function CaseStudyView({ customLogo, showToast, apiKey, setActiveTab }) {
     { key: 'kalenborn_reference', label: 'Kalenborn reference', labelPt: 'Referência Kalenborn' },
   ];
 
-  const CampoComMic = ({ fieldKey, label, labelPt, multiline }) => {
-    const gravando = recordingField === fieldKey;
-    const transcrevendo = transcribingField === fieldKey;
-    const Comp = multiline ? 'textarea' : 'input';
-    return (
-      <div>
-        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">{label} <span className="font-normal normal-case text-slate-400">/ {labelPt}</span></label>
-        <div className="flex items-start gap-2">
-          <Comp
-            {...(multiline ? { rows: 3 } : { type: 'text' })}
-            value={form[fieldKey] || ''}
-            onChange={e => setForm(f => ({ ...f, [fieldKey]: e.target.value }))}
-            placeholder="-"
-            className="flex-1 px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none resize-y"
-          />
-          <button
-            type="button"
-            disabled={transcrevendo}
-            onClick={() => gravando ? stopRecording() : startRecording(fieldKey)}
-            className={`w-10 h-10 shrink-0 rounded-lg flex items-center justify-center transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait ${gravando ? 'bg-rose-500 text-white animate-pulse' : 'bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white'}`}
-            title={gravando ? 'Parar gravação' : transcrevendo ? 'Transcrevendo...' : 'Gravar áudio e transcrever'}
-          >
-            {transcrevendo ? <RefreshCw size={16} className="animate-spin" /> : gravando ? <MicOff size={16} /> : <Mic size={16} />}
-          </button>
-        </div>
-      </div>
-    );
-  };
+  const camposResultado = [
+    { key: 'resultado_vida_util', label: 'Estimated lifetime', labelPt: 'Vida útil estimada do revestimento' },
+    { key: 'resultado_reducao_paradas', label: 'Downtime reduction', labelPt: 'Redução de paradas de manutenção' },
+    { key: 'resultado_ganho_operacional', label: 'Operational gain', labelPt: 'Ganho operacional observado' },
+  ];
 
-  // ===== Geração do documento final (PDF) =====
+  const slotsFoto = [
+    { key: 'capa', label: 'Foto de capa', desc: 'Paisagem — aparece na capa do estudo', aspecto: 'aspect-video' },
+    { key: 'solucao', label: 'Foto da solução aplicada', desc: 'Retrato — componente/revestimento aplicado', aspecto: 'aspect-[3/4]' },
+    { key: 'antes', label: 'Antes da aplicação', desc: 'Retrato', aspecto: 'aspect-[3/4]' },
+    { key: 'durante', label: 'Durante a montagem', desc: 'Retrato', aspecto: 'aspect-[3/4]' },
+    { key: 'depois', label: 'Depois da aplicação', desc: 'Retrato', aspecto: 'aspect-[3/4]' },
+  ];
+
+  // ===== Geração do documento final (PDF) — 4 páginas, réplica literal do modelo =====
   const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const gerarHtmlEstudo = () => {
-    const logoSrc = customLogo || defaultLogoBase64;
-    const pares = [
-      ['industry', 'industry_detail'], ['component', 'conveying_material'],
-      ['conveying_speed', 'lining_material'], ['lining_material_thickness', 'base_material'],
-      ['fixing_system', 'wear'], ['application_temperature', 'corrosion'],
-      ['dimension', 'area_to_be_lined']
-    ];
-    const campoPorKey = Object.fromEntries(campos.map(c => [c.key, c]));
-    const gridRows = pares.map(([k1, k2]) => `
-      <tr>
-        <td style="width:50%;padding:8px 12px;border:1px solid #E4E6E9;vertical-align:top">
-          <div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">${campoPorKey[k1].label}</div>
-          <div style="font-size:10.5pt;font-weight:600;margin-top:2px">${esc(form[k1] || '—')}</div>
-        </td>
-        <td style="width:50%;padding:8px 12px;border:1px solid #E4E6E9;vertical-align:top">
-          <div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">${campoPorKey[k2].label}</div>
-          <div style="font-size:10.5pt;font-weight:600;margin-top:2px">${esc(form[k2] || '—')}</div>
-        </td>
-      </tr>`).join('');
+    const logoImg = customLogo || defaultLogoBase64;
+    const F = 'Helvetica Neue,Helvetica,Arial,sans-serif';
+    const fotos = garantirFotosObjeto(form.fotos);
+    const val = (v) => esc(v || '—');
 
-    const fotosHtml = (form.fotos || []).map((f, i) => `
-      <div style="width:48%;display:inline-block;margin:1%;vertical-align:top">
-        <img src="${esc(f.url)}" style="width:100%;height:90mm;object-fit:cover;border:1px solid #C9CDD3">
-        <div style="font-size:8pt;color:#6B7280;margin-top:3px">Foto ${i + 1}</div>
-      </div>`).join('');
+    const imgOrPlaceholder = (foto, placeholderTexto, extraStyle = '') => foto?.url
+      ? `<img src="${esc(foto.url)}" style="width:100%;height:100%;object-fit:cover;display:block${extraStyle}">`
+      : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;background:#F4F4F2;color:#8A8A8A;font-size:9pt;padding:4mm;box-sizing:border-box">${esc(placeholderTexto)}</div>`;
 
-    const pagina1 = `
-    <section style="position:relative;padding:0 0 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:297mm">
-      <div style="background:#FFD200;padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20pt;letter-spacing:.02em;color:#111">Project information</div>
-        <img src="${logoSrc}" alt="Kalenborn" style="height:11mm;width:auto;background:#fff;padding:4px 8px;border-radius:4px">
-      </div>
-      <div style="padding:14px 16px 0">
-        <h1 style="margin:0 0 2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18pt">${esc(form.titulo || form.cliente || 'Estudo de Caso')}</h1>
-        ${form.cliente ? `<div style="font-size:10pt;color:#6B7280;margin-bottom:10px">${esc(form.cliente)}</div>` : ''}
+    const rodape = (numero) => `
+      <div style="display:flex;justify-content:space-between;font-size:7pt;letter-spacing:0.16em;text-transform:uppercase;color:#8A8A8A;border-top:0.3mm solid #DCDCDC;padding-top:4mm;position:absolute;left:16mm;right:16mm;bottom:10mm">
+        <span style="display:flex;align-items:center;gap:3mm"><img src="${logoImg}" alt="Kalenborn" style="display:block;width:20mm;height:auto"><span>Estudo de caso</span></span>
+        <span>${numero}</span>
+      </div>`;
 
-        <table style="width:100%;border-collapse:collapse;margin-top:6px">${gridRows}</table>
-
-        ${form.miscellaneous ? `
-        <div style="margin-top:10px">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid #111;padding-bottom:3px;margin-bottom:6px">Miscellaneous</div>
-          <p style="margin:0;font-size:10pt;line-height:1.45;text-align:justify">${esc(form.miscellaneous)}</p>
-        </div>` : ''}
-
-        ${form.description ? `
-        <div style="margin-top:14px">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid #111;padding-bottom:3px;margin-bottom:6px">Description</div>
-          <p style="margin:0;font-size:10pt;line-height:1.5;text-align:justify">${esc(form.description)}</p>
-        </div>` : ''}
+    // ---------- CAPA ----------
+    const capa = `
+    <section style="position:relative;width:210mm;height:297mm;box-sizing:border-box;background:#111111;color:#fff;font-family:${F};overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+      <div style="padding:18mm 16mm 0 16mm;display:flex;justify-content:space-between;align-items:flex-start;gap:10mm">
+        <div style="display:flex;flex-direction:column;gap:2mm">
+          <div style="font-size:15pt;font-weight:700;letter-spacing:0.18em;text-transform:uppercase">Kalenborn</div>
+          <div style="font-size:7.5pt;letter-spacing:0.22em;text-transform:uppercase;color:#FFD100">Wear protection · Proteção contra desgaste</div>
+        </div>
+        <div style="text-align:right;font-size:7.5pt;letter-spacing:0.2em;text-transform:uppercase;color:#A3A3A3;line-height:1.8">
+          <div>Estudo de caso</div>
+          <div style="color:#6E6E6E">Case study</div>
+        </div>
       </div>
 
-      <div style="position:absolute;left:16px;right:16px;bottom:0;border-top:1px solid #C9CDD3;padding-top:6px;display:flex;justify-content:space-between;font-size:8pt;color:#6B7280">
-        <div>${new Date().toLocaleDateString('pt-BR')}${form.autor ? ` · ${esc(form.autor)}` : ''}</div>
-        <div>${esc(form.kalenborn_reference || '')}</div>
+      <div style="padding:14mm 16mm 10mm 16mm;display:flex;flex-direction:column;gap:6mm">
+        <div style="width:22mm;height:1.6mm;background:#FFD100"></div>
+        <div style="font-size:9pt;letter-spacing:0.2em;text-transform:uppercase;color:#A3A3A3">Cliente</div>
+        <div style="font-size:15pt;font-weight:600;letter-spacing:0.01em;margin-top:-3mm">${esc(form.cliente || 'Nome do cliente')}</div>
+        <h1 style="margin:2mm 0 0 0;font-size:30pt;line-height:1.12;font-weight:700;letter-spacing:-0.015em;max-width:150mm">${esc(form.titulo || 'Título do projeto de aplicação')}</h1>
+        <p style="margin:0;font-size:11pt;line-height:1.55;color:#D6D6D6;max-width:130mm">${esc(form.resumo || 'Uma linha de resumo do desafio e da solução aplicada — componente, material de revestimento e resultado obtido.')}</p>
+      </div>
+
+      <div style="position:absolute;left:0;right:0;top:95mm;bottom:0">
+        ${imgOrPlaceholder(fotos.capa, 'Foto principal da aplicação (paisagem)')}
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:8mm 16mm 8mm 16mm;background:linear-gradient(to top,rgba(0,0,0,0.9),rgba(0,0,0,0));pointer-events:none;display:grid;grid-template-columns:repeat(4,1fr);gap:6mm">
+          <div><div style="font-size:6.5pt;letter-spacing:0.18em;text-transform:uppercase;color:#A3A3A3">Segmento</div><div style="font-size:9.5pt;font-weight:600;margin-top:1.5mm;color:#fff">${val(form.industry)}</div></div>
+          <div><div style="font-size:6.5pt;letter-spacing:0.18em;text-transform:uppercase;color:#A3A3A3">Componente</div><div style="font-size:9.5pt;font-weight:600;margin-top:1.5mm;color:#fff">${val(form.component)}</div></div>
+          <div><div style="font-size:6.5pt;letter-spacing:0.18em;text-transform:uppercase;color:#A3A3A3">Responsável</div><div style="font-size:9.5pt;font-weight:600;margin-top:1.5mm;color:#fff">${val(form.autor)}</div></div>
+          <div><div style="font-size:6.5pt;letter-spacing:0.18em;text-transform:uppercase;color:#A3A3A3">Ref. Kalenborn</div><div style="font-size:9.5pt;font-weight:600;margin-top:1.5mm;color:#fff">${val(form.kalenborn_reference)}</div></div>
+        </div>
       </div>
     </section>`;
 
-    const pagina2 = form.fotos.length > 0 ? `
-    <section style="position:relative;padding:16px;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111;background:#fff;box-sizing:border-box;min-height:297mm;page-break-before:always">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14pt;letter-spacing:.04em;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:10px">Photos</div>
-      ${fotosHtml}
-    </section>` : '';
+    // ---------- 01 · O PROJETO ----------
+    const pagina01 = `
+    <section style="position:relative;width:210mm;height:297mm;box-sizing:border-box;background:#fff;color:#111111;font-family:${F};padding:16mm 16mm 12mm 16mm;page-break-before:always">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.2mm solid #111111;padding-bottom:4mm">
+        <div style="display:flex;align-items:baseline;gap:5mm">
+          <span style="font-size:9.5pt;font-weight:700;color:#111111;background:#FFD100;padding:1.4mm 2.6mm">01</span>
+          <h2 style="margin:0;font-size:19pt;font-weight:700;letter-spacing:-0.01em">O projeto</h2>
+        </div>
+        <span style="font-size:7.5pt;letter-spacing:0.2em;text-transform:uppercase;color:#6E6E6E">The project</span>
+      </div>
 
-    const separador = form.fotos.length > 0 ? `<div data-html2canvas-ignore="true" style="position:relative;height:0;border-top:2px dashed #94A3B8;margin:4px 0"><span style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:#fff;padding:0 12px;font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748B;text-transform:uppercase;white-space:nowrap">Fim da página 1 · Fotos</span></div>` : '';
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0;border-bottom:0.3mm solid #DCDCDC;margin-top:8mm">
+        <div style="padding:0 6mm 6mm 0">
+          <div style="font-size:7pt;letter-spacing:0.16em;text-transform:uppercase;color:#111111;font-weight:700">Industry <span style="color:#8A8A8A;font-weight:400">/ Segmento</span></div>
+          <div style="font-size:11.5pt;margin-top:2mm">${val(form.industry)}</div>
+        </div>
+        <div style="padding:0 0 6mm 6mm;border-left:0.3mm solid #DCDCDC">
+          <div style="font-size:7pt;letter-spacing:0.16em;text-transform:uppercase;color:#111111;font-weight:700">Industry detail <span style="color:#8A8A8A;font-weight:400">/ Detalhe do segmento</span></div>
+          <div style="font-size:11.5pt;margin-top:2mm">${val(form.industry_detail)}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0;margin-top:6mm">
+        <div style="padding:0 6mm 0 0">
+          <div style="font-size:7pt;letter-spacing:0.16em;text-transform:uppercase;color:#111111;font-weight:700">Component <span style="color:#8A8A8A;font-weight:400">/ Componente</span></div>
+          <div style="font-size:11.5pt;margin-top:2mm">${val(form.component)}</div>
+        </div>
+        <div style="padding:0 0 0 6mm;border-left:0.3mm solid #DCDCDC">
+          <div style="font-size:7pt;letter-spacing:0.16em;text-transform:uppercase;color:#111111;font-weight:700">Conveying material <span style="color:#8A8A8A;font-weight:400">/ Material transportado</span></div>
+          <div style="font-size:11.5pt;margin-top:2mm">${val(form.conveying_material)}</div>
+        </div>
+      </div>
 
-    return pagina1 + separador + pagina2;
+      <h3 style="margin:11mm 0 0 0;font-size:9pt;letter-spacing:0.18em;text-transform:uppercase;color:#111111">Descrição do projeto <span style="color:#8A8A8A">/ Description</span></h3>
+      <p style="margin:4mm 0 0 0;font-size:10.5pt;line-height:1.6;color:#3A3A3A">${esc(form.description || 'Descreva aqui o contexto da aplicação: onde o componente opera, o histórico de desgaste, a frequência de paradas e manutenção, e o que o cliente precisava resolver.')}</p>
+
+      <div style="margin-top:11mm">
+        <h3 style="margin:0;font-size:9pt;letter-spacing:0.18em;text-transform:uppercase;color:#111111">Condições de operação <span style="color:#8A8A8A">/ Operating conditions</span></h3>
+        <table style="width:100%;border-collapse:collapse;margin-top:4mm;font-size:10pt">
+          <tbody>
+            <tr style="border-top:0.3mm solid #DCDCDC"><td style="padding:3.6mm 0;width:52%;color:#111111;font-weight:600">Conveying speed <span style="color:#8A8A8A;font-weight:400">/ Velocidade de transporte</span></td><td style="padding:3.6mm 0;color:#3A3A3A">${val(form.conveying_speed)}</td></tr>
+            <tr style="border-top:0.3mm solid #DCDCDC"><td style="padding:3.6mm 0;color:#111111;font-weight:600">Application temperature <span style="color:#8A8A8A;font-weight:400">/ Temperatura de aplicação</span></td><td style="padding:3.6mm 0;color:#3A3A3A">${val(form.application_temperature)}</td></tr>
+            <tr style="border-top:0.3mm solid #DCDCDC"><td style="padding:3.6mm 0;color:#111111;font-weight:600">Wear <span style="color:#8A8A8A;font-weight:400">/ Tipo de desgaste</span></td><td style="padding:3.6mm 0;color:#3A3A3A">${val(form.wear)}</td></tr>
+            <tr style="border-top:0.3mm solid #DCDCDC"><td style="padding:3.6mm 0;color:#111111;font-weight:600">Corrosion <span style="color:#8A8A8A;font-weight:400">/ Corrosão</span></td><td style="padding:3.6mm 0;color:#3A3A3A">${val(form.corrosion)}</td></tr>
+            <tr style="border-top:0.3mm solid #DCDCDC;border-bottom:0.3mm solid #DCDCDC"><td style="padding:3.6mm 0;color:#111111;font-weight:600">Dimension <span style="color:#8A8A8A;font-weight:400">/ Dimensão</span></td><td style="padding:3.6mm 0;color:#3A3A3A">${val(form.dimension)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      ${rodape('01')}
+    </section>`;
+
+    // ---------- 02 · A SOLUÇÃO APLICADA ----------
+    const boxSolucao = (titulo, sub, valor, escuro) => `
+      <div style="background:${escuro ? '#111111' : '#F4F4F2'};color:${escuro ? '#fff' : '#111'};padding:6mm 5mm">
+        <div style="font-size:6.8pt;letter-spacing:0.16em;text-transform:uppercase;color:${escuro ? '#FFD100' : '#6E6E6E'};font-weight:700">${titulo}</div>
+        <div style="font-size:6.8pt;color:${escuro ? '#6E6E6E' : '#8A8A8A'};margin-top:0.8mm">${sub}</div>
+        <div style="font-size:13pt;font-weight:600;margin-top:4mm">${val(valor)}</div>
+      </div>`;
+
+    const pagina02 = `
+    <section style="position:relative;width:210mm;height:297mm;box-sizing:border-box;background:#fff;color:#111111;font-family:${F};padding:16mm 16mm 12mm 16mm;page-break-before:always">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.2mm solid #111111;padding-bottom:4mm">
+        <div style="display:flex;align-items:baseline;gap:5mm">
+          <span style="font-size:9.5pt;font-weight:700;color:#111111;background:#FFD100;padding:1.4mm 2.6mm">02</span>
+          <h2 style="margin:0;font-size:19pt;font-weight:700;letter-spacing:-0.01em">A solução aplicada</h2>
+        </div>
+        <span style="font-size:7.5pt;letter-spacing:0.2em;text-transform:uppercase;color:#6E6E6E">The solution</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4mm;margin-top:8mm">
+        ${boxSolucao('Lining material', 'Material do revestimento', form.lining_material)}
+        ${boxSolucao('Thickness', 'Espessura do revestimento', form.lining_material_thickness)}
+        ${boxSolucao('Base material', 'Material da base', form.base_material)}
+        ${boxSolucao('Fixing system', 'Sistema de fixação', form.fixing_system)}
+        ${boxSolucao('Area to be lined', 'Área a revestir', form.area_to_be_lined)}
+        ${boxSolucao('Kalenborn reference', 'Referência Kalenborn', form.kalenborn_reference, true)}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:11mm">
+        <div>
+          <h3 style="margin:0;font-size:9pt;letter-spacing:0.18em;text-transform:uppercase;color:#111111">Observações gerais <span style="color:#8A8A8A">/ Miscellaneous</span></h3>
+          <p style="margin:4mm 0 0 0;font-size:10.5pt;line-height:1.6;color:#3A3A3A">${esc(form.miscellaneous || 'Registre aqui detalhes de execução: prazo de montagem, condições de parada, cuidados de instalação e recomendações para a próxima inspeção.')}</p>
+          <h3 style="margin:9mm 0 0 0;font-size:9pt;letter-spacing:0.18em;text-transform:uppercase;color:#111111">Resultado <span style="color:#8A8A8A">/ Result</span></h3>
+          <ul style="margin:4mm 0 0 0;padding-left:5mm;font-size:10.5pt;line-height:1.6;color:#3A3A3A">
+            <li style="margin-bottom:2mm">Vida útil estimada do revestimento: ${val(form.resultado_vida_util)}</li>
+            <li style="margin-bottom:2mm">Redução de paradas de manutenção: ${val(form.resultado_reducao_paradas)}</li>
+            <li>Ganho operacional observado: ${val(form.resultado_ganho_operacional)}</li>
+          </ul>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3mm">
+          <div style="width:100%;aspect-ratio:3/4;position:relative;overflow:hidden">${imgOrPlaceholder(fotos.solucao, 'Foto do componente / retrato')}</div>
+          <div style="font-size:7.5pt;color:#8A8A8A;letter-spacing:0.06em">${esc(form.legenda_foto_solucao || 'Legenda da foto — situação encontrada ou revestimento aplicado.')}</div>
+        </div>
+      </div>
+      ${rodape('02')}
+    </section>`;
+
+    // ---------- 03 · REGISTRO FOTOGRÁFICO ----------
+    const fotoRegistro = (foto, legenda, placeholder) => `
+      <div style="display:flex;flex-direction:column;gap:3mm">
+        <div style="width:100%;aspect-ratio:3/4;position:relative;overflow:hidden">${imgOrPlaceholder(foto, placeholder)}</div>
+        <div style="font-size:7.5pt;color:#8A8A8A">${legenda}</div>
+      </div>`;
+
+    const pagina03 = `
+    <section style="position:relative;width:210mm;height:297mm;box-sizing:border-box;background:#fff;color:#111111;font-family:${F};padding:16mm 16mm 12mm 16mm;page-break-before:always">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.2mm solid #111111;padding-bottom:4mm">
+        <div style="display:flex;align-items:baseline;gap:5mm">
+          <span style="font-size:9.5pt;font-weight:700;color:#111111;background:#FFD100;padding:1.4mm 2.6mm">03</span>
+          <h2 style="margin:0;font-size:19pt;font-weight:700;letter-spacing:-0.01em">Registro fotográfico</h2>
+        </div>
+        <span style="font-size:7.5pt;letter-spacing:0.2em;text-transform:uppercase;color:#6E6E6E">Photo record</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5mm;margin-top:8mm">
+        ${fotoRegistro(fotos.antes, 'Antes da aplicação', 'Foto 1 — retrato')}
+        ${fotoRegistro(fotos.durante, 'Durante a montagem', 'Foto 2 — retrato')}
+        ${fotoRegistro(fotos.depois, 'Depois da aplicação', 'Foto 3 — retrato')}
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6mm;margin-top:20mm;padding-top:6mm;border-top:0.3mm solid #DCDCDC">
+        <div><div style="font-size:7pt;letter-spacing:0.16em;text-transform:uppercase;color:#8A8A8A">Responsável técnico</div><div style="border-bottom:0.3mm solid #111111;height:9mm">${esc(form.autor || '')}</div></div>
+        <div><div style="font-size:7pt;letter-spacing:0.16em;text-transform:uppercase;color:#8A8A8A">Cliente / aprovação</div><div style="border-bottom:0.3mm solid #111111;height:9mm"></div></div>
+        <div><div style="font-size:7pt;letter-spacing:0.16em;text-transform:uppercase;color:#8A8A8A">Data</div><div style="border-bottom:0.3mm solid #111111;height:9mm">${new Date().toLocaleDateString('pt-BR')}</div></div>
+      </div>
+      ${rodape('03')}
+    </section>`;
+
+    const separador = `<div data-html2canvas-ignore="true" style="position:relative;height:0;border-top:2px dashed #94A3B8;margin:4px 0"></div>`;
+
+    return capa + separador + pagina01 + separador + pagina02 + separador + pagina03;
   };
 
   const handleDownloadPdf = async () => {
@@ -3200,14 +3408,15 @@ function CaseStudyView({ customLogo, showToast, apiKey, setActiveTab }) {
           <button onClick={() => setIsListVisible(true)} className="lg:hidden bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 px-3 rounded-lg flex items-center gap-2 cursor-pointer text-sm"><ChevronLeft size={16} /> Lista</button>
           {!apiKey && (
             <button onClick={() => setActiveTab && setActiveTab('settings')} className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold px-3 py-2 rounded-lg cursor-pointer hover:bg-amber-100">
-              <AlertTriangle size={14} /> Configure a chave da OpenAI para gravar áudio
+              <AlertTriangle size={14} /> Configure a chave da OpenAI para gravar áudio e usar a IA
             </button>
           )}
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
             <select value={lang} onChange={e => setLang(e.target.value)} className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-2 outline-none cursor-pointer">
               <option value="pt">🎙️ Falar em Português</option>
               <option value="en">🎙️ Speak in English</option>
             </select>
+            <button onClick={handleGerarRascunhoIA} disabled={isDraftingAI} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer text-sm disabled:opacity-50">{isDraftingAI ? <RefreshCw size={16} className="animate-spin" /> : <Bot size={16} />} Gerar rascunho com IA</button>
             <button onClick={handleSave} disabled={isSaving} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer text-sm disabled:opacity-50">{isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />} Salvar</button>
             <button onClick={handleDownloadPdf} disabled={isGenerating} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer text-sm disabled:opacity-50">{isGenerating ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />} Gerar PDF</button>
           </div>
@@ -3215,6 +3424,11 @@ function CaseStudyView({ customLogo, showToast, apiKey, setActiveTab }) {
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-8">
           <div className="max-w-3xl mx-auto space-y-6">
+            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 flex items-start gap-3">
+              <Bot size={20} className="text-purple-600 shrink-0 mt-0.5" />
+              <div className="text-xs text-purple-800 leading-relaxed"><strong>Dica:</strong> grave as respostas por voz nos campos abaixo (ou digite rápido), depois clique em <strong>"Gerar rascunho com IA"</strong> — ela escreve o título, resumo, descrição e resultados prontos pra revisão, adiantando o trabalho de redação.</div>
+            </div>
+
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -3224,6 +3438,10 @@ function CaseStudyView({ customLogo, showToast, apiKey, setActiveTab }) {
                 <div>
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Cliente</label>
                   <input type="text" value={form.cliente} onChange={e => setForm(f => ({ ...f, cliente: e.target.value }))} placeholder="Ex: Tronox Pigmentos do Brasil" className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Resumo (aparece na capa)</label>
+                  <input type="text" value={form.resumo} onChange={e => setForm(f => ({ ...f, resumo: e.target.value }))} placeholder="Uma linha resumindo o desafio e a solução aplicada" className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none" />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Responsável</label>
@@ -3237,31 +3455,75 @@ function CaseStudyView({ customLogo, showToast, apiKey, setActiveTab }) {
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-              <h3 className="font-black text-sm uppercase text-slate-700 mb-4">Perguntas do projeto</h3>
+              <h3 className="font-black text-sm uppercase text-slate-700 mb-4">01 · O projeto</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {campos.map(c => <CampoComMic key={c.key} fieldKey={c.key} label={c.label} labelPt={c.labelPt} />)}
+                {campos.map(c => <CampoComMic key={c.key} fieldKey={c.key} label={c.label} labelPt={c.labelPt} form={form} setForm={setForm} recordingField={recordingField} transcribingField={transcribingField} startRecording={startRecording} stopRecording={stopRecording} />)}
+              </div>
+              <div className="mt-4">
+                <CampoComMic fieldKey="description" label="Description" labelPt="Descrição completa do projeto" multiline form={form} setForm={setForm} recordingField={recordingField} transcribingField={transcribingField} startRecording={startRecording} stopRecording={stopRecording} />
               </div>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <CampoComMic fieldKey="miscellaneous" label="Miscellaneous" labelPt="Observações gerais" multiline />
-              <CampoComMic fieldKey="description" label="Description" labelPt="Descrição completa do projeto" multiline />
+              <h3 className="font-black text-sm uppercase text-slate-700">02 · A solução aplicada</h3>
+              <CampoComMic fieldKey="miscellaneous" label="Miscellaneous" labelPt="Observações gerais" multiline form={form} setForm={setForm} recordingField={recordingField} transcribingField={transcribingField} startRecording={startRecording} stopRecording={stopRecording} />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {camposResultado.map(c => <CampoComMic key={c.key} fieldKey={c.key} label={c.label} labelPt={c.labelPt} form={form} setForm={setForm} recordingField={recordingField} transcribingField={transcribingField} startRecording={startRecording} stopRecording={stopRecording} />)}
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Legenda da foto da solução</label>
+                <input type="text" value={form.legenda_foto_solucao} onChange={e => setForm(f => ({ ...f, legenda_foto_solucao: e.target.value }))} placeholder="Ex: Revestimento Kalocer aplicado após 12h de vulcanização" className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none" />
+              </div>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-              <h3 className="font-black text-sm uppercase text-slate-700 mb-1">Fotos (formato retrato)</h3>
-              <p className="text-xs text-slate-400 mb-4">Tire foto ou envie da galeria.</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {form.fotos.map((f, i) => (
-                  <div key={i} className="relative aspect-[3/4] rounded-lg overflow-hidden border border-slate-200 group">
-                    <img src={f.url} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
-                    <button onClick={() => removerFoto(i)} className="absolute top-1.5 right-1.5 w-7 h-7 bg-rose-500 text-white rounded-lg flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={13} /></button>
+              <h3 className="font-black text-sm uppercase text-slate-700 mb-1">Fotos do estudo de caso</h3>
+              <p className="text-xs text-slate-400 mb-4">Cada foto tem um lugar certo no documento final — capa, solução aplicada e antes/durante/depois.</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {slotsFoto.map(slot => {
+                  const foto = form.fotos[slot.key];
+                  return (
+                    <div key={slot.key}>
+                      <div className={`relative ${slot.aspecto} rounded-lg overflow-hidden border-2 ${foto ? 'border-slate-200' : 'border-dashed border-slate-300'} group`}>
+                        {foto ? (
+                          <>
+                            <img src={foto.url} alt={slot.label} className="w-full h-full object-cover" />
+                            <button onClick={() => removerSlotFoto(slot.key)} className="absolute top-1.5 right-1.5 w-7 h-7 bg-rose-500 text-white rounded-lg flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={13} /></button>
+                          </>
+                        ) : (
+                          <label className="w-full h-full flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:bg-blue-50/30 transition-all text-slate-400 hover:text-blue-500 p-2 text-center">
+                            <Camera size={20} />
+                            <span className="text-[10px] font-bold">{slot.label}</span>
+                            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handleSlotFotoUpload(slot.key, e.target.files?.[0])} />
+                          </label>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1 text-center">{slot.desc}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <h3 className="font-black text-sm uppercase text-slate-700 mb-1">Mídias extras (fotos e vídeos)</h3>
+              <p className="text-xs text-slate-400 mb-4">Conteúdo complementar pra registro do projeto — não entra no PDF, fica guardado aqui no estudo de caso.</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {form.midias_extra.map((m, i) => (
+                  <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 group bg-slate-100 flex items-center justify-center">
+                    {m.tipo === 'video' ? (
+                      <video src={m.url} className="w-full h-full object-cover" />
+                    ) : (
+                      <img src={m.url} alt={m.nome} className="w-full h-full object-cover" />
+                    )}
+                    {m.tipo === 'video' && <div className="absolute inset-0 flex items-center justify-center bg-black/20"><Video size={22} className="text-white" /></div>}
+                    <button onClick={() => removerExtra(i)} className="absolute top-1.5 right-1.5 w-7 h-7 bg-rose-500 text-white rounded-lg flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={13} /></button>
                   </div>
                 ))}
-                <label className="aspect-[3/4] rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all text-slate-400 hover:text-blue-500">
-                  <Camera size={22} />
-                  <span className="text-[10px] font-bold text-center px-2">Tirar foto ou enviar</span>
-                  <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handlePhotoUpload} />
+                <label className="aspect-square rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all text-slate-400 hover:text-blue-500">
+                  <Video size={20} />
+                  <span className="text-[10px] font-bold text-center px-2">Foto ou vídeo</span>
+                  <input type="file" accept="image/*,video/*" capture="environment" multiple className="hidden" onChange={handleExtraUpload} />
                 </label>
               </div>
             </div>
