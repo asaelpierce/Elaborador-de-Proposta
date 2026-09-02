@@ -1001,7 +1001,7 @@ export default function App() {
             {activeTab === 'fisp' && <FispView fispList={fispList} showToast={showToast} refreshData={refreshData} />}
             {activeTab === 'simulator' && <SimulatorView showToast={showToast} refreshData={refreshData} products={products} />}
             {activeTab === 'technicalSheet' && <TechnicalSheetView products={products} customLogo={customLogo} showToast={showToast} initialSelectedId={selectedTechSheetId} />}
-            {activeTab === 'caseStudy' && <CaseStudyView customLogo={customLogo} showToast={showToast} />}
+            {activeTab === 'caseStudy' && <CaseStudyView customLogo={customLogo} showToast={showToast} apiKey={openAIApiKey} setActiveTab={setActiveTab} />}
             {activeTab === 'settings' && <SettingsView showToast={showToast} setCustomLogo={setCustomLogo} currentLogo={customLogo} refreshData={refreshData} openAIApiKey={openAIApiKey} setOpenAIApiKey={setOpenAIApiKey} />}
           </div>
         )}
@@ -2906,7 +2906,7 @@ function SettingsView({ showToast, setCustomLogo, currentLogo, refreshData, open
   return (
     <div className="p-6 sm:p-10 max-w-4xl mx-auto space-y-10 h-full overflow-y-auto custom-scrollbar font-sans text-left">
        <h1 className="text-3xl font-black text-slate-800 uppercase tracking-widest border-b pb-4">Ajustes do Sistema</h1>
-       <div className="bg-purple-50 p-6 sm:p-8 rounded-[2rem] border border-purple-200 shadow-sm mb-6"><h2 className="text-lg font-black mb-2 text-purple-900 flex items-center gap-2"><Bot size={24}/> Inteligência Artificial</h2><p className="text-sm text-purple-700 mb-6 font-medium">Configure a chave da API para ativar o cálculo fiscal inteligente.</p><div className="relative mb-4"><input type="password" value={openAIApiKey} onChange={(e) => setOpenAIApiKey(e.target.value)} placeholder="sk-proj-..." className="w-full pl-6 pr-10 py-4 rounded-xl border border-purple-300 focus:ring-2 focus:ring-purple-500 outline-none text-sm font-mono shadow-inner bg-white shadow-purple-900/5" /><Key size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-purple-400" /></div><button onClick={handleSaveApiKey} className="bg-purple-600 text-white px-6 py-3 rounded-xl font-bold text-xs uppercase hover:bg-purple-700 transition-all shadow-lg cursor-pointer">Salvar Chave API</button></div>
+       <div className="bg-purple-50 p-6 sm:p-8 rounded-[2rem] border border-purple-200 shadow-sm mb-6"><h2 className="text-lg font-black mb-2 text-purple-900 flex items-center gap-2"><Bot size={24}/> Inteligência Artificial</h2><p className="text-sm text-purple-700 mb-6 font-medium">Configure a chave da API da OpenAI (platform.openai.com) para ativar o cálculo fiscal inteligente e a gravação/transcrição de áudio na aba Estudo de Caso.</p><div className="relative mb-4"><input type="password" value={openAIApiKey} onChange={(e) => setOpenAIApiKey(e.target.value)} placeholder="sk-proj-..." className="w-full pl-6 pr-10 py-4 rounded-xl border border-purple-300 focus:ring-2 focus:ring-purple-500 outline-none text-sm font-mono shadow-inner bg-white shadow-purple-900/5" /><Key size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-purple-400" /></div><button onClick={handleSaveApiKey} className="bg-purple-600 text-white px-6 py-3 rounded-xl font-bold text-xs uppercase hover:bg-purple-700 transition-all shadow-lg cursor-pointer">Salvar Chave API</button></div>
        <div className="bg-white p-6 sm:p-10 rounded-[3rem] border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-12 justify-center"><div className="h-40 w-full md:w-80 border-2 border-slate-100 bg-slate-50/50 rounded-[2rem] flex items-center justify-center p-8 shadow-inner"><img src={currentLogo || defaultLogoBase64} alt="Logo" className="max-h-full max-w-full object-contain filter drop-shadow-md" /></div><label className="bg-[#0F172A] text-white px-10 py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-blue-600 transition-all shadow-xl flex items-center gap-2"><FileUp size={16}/> Alterar Logo no Banco<input type="file" className="hidden" onChange={handleLogoUpload} accept="image/*" /></label></div>
     </div>
   );
@@ -2915,7 +2915,7 @@ function SettingsView({ showToast, setCustomLogo, currentLogo, refreshData, open
 // ==========================================
 // ESTUDO DE CASO — gravação de voz por campo, transcrição automática, fotos e geração de documento
 // ==========================================
-function CaseStudyView({ customLogo, showToast }) {
+function CaseStudyView({ customLogo, showToast, apiKey, setActiveTab }) {
   const emptyForm = {
     id: '', titulo: '', cliente: '', autor: '', internal_use_only: true,
     industry: '', industry_detail: '', component: '', conveying_material: '',
@@ -2929,10 +2929,13 @@ function CaseStudyView({ customLogo, showToast }) {
   const [form, setForm] = useState(emptyForm);
   const [isListVisible, setIsListVisible] = useState(true);
   const [recordingField, setRecordingField] = useState(null);
+  const [transcribingField, setTranscribingField] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [lang, setLang] = useState('pt-BR');
-  const recognitionRef = useRef(null);
+  const [lang, setLang] = useState('pt');
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const streamRef = useRef(null);
 
   const carregarLista = async () => {
     try {
@@ -2945,29 +2948,68 @@ function CaseStudyView({ customLogo, showToast }) {
   const novoEstudo = () => { setForm({ ...emptyForm, id: crypto.randomUUID() }); if (window.innerWidth < 1024) setIsListVisible(false); };
   const abrirEstudo = (cs) => { setForm({ ...emptyForm, ...cs, fotos: Array.isArray(cs.fotos) ? cs.fotos : [] }); if (window.innerWidth < 1024) setIsListVisible(false); };
 
-  const startRecording = (fieldKey) => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { showToast('Gravação de voz não é suportada neste navegador. Use o Chrome.'); return; }
-    if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch (e) {} }
-    const recognition = new SpeechRecognition();
-    recognition.lang = lang;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.continuous = false;
-    recognition.onresult = (e) => {
-      const texto = e.results[0][0].transcript;
-      setForm(f => ({ ...f, [fieldKey]: (f[fieldKey] ? f[fieldKey] + ' ' : '') + texto }));
-    };
-    recognition.onerror = (e) => {
-      if (e.error !== 'aborted') showToast('Erro na gravação: ' + e.error);
-      setRecordingField(null);
-    };
-    recognition.onend = () => { setRecordingField(null); };
-    recognitionRef.current = recognition;
-    setRecordingField(fieldKey);
-    recognition.start();
+  // Grava o áudio de verdade (funciona em iPhone/Android/qualquer navegador)
+  // e manda pra transcrição via API — em vez do reconhecimento de voz nativo
+  // do navegador, que não funciona direito no Safari/iOS.
+  const startRecording = async (fieldKey) => {
+    if (!apiKey) { showToast('Configure a chave da OpenAI em Configurações antes de gravar.'); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const tiposPossiveis = ['audio/mp4', 'audio/webm', 'audio/ogg'];
+      const mimeType = tiposPossiveis.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        transcreverAudio(blob, fieldKey);
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecordingField(fieldKey);
+    } catch (err) {
+      showToast('Não foi possível acessar o microfone. Verifique a permissão do navegador.');
+    }
   };
-  const stopRecording = () => { if (recognitionRef.current) recognitionRef.current.stop(); };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
+    setRecordingField(null);
+  };
+
+  const transcreverAudio = async (blob, fieldKey) => {
+    setTranscribingField(fieldKey);
+    try {
+      const ext = (blob.type || '').includes('mp4') ? 'mp4' : (blob.type || '').includes('ogg') ? 'ogg' : 'webm';
+      const arquivo = new File([blob], `audio.${ext}`, { type: blob.type || 'audio/webm' });
+      const formData = new FormData();
+      formData.append('file', arquivo);
+      formData.append('model', 'whisper-1');
+      formData.append('language', lang);
+      const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: formData
+      });
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(errBody);
+      }
+      const data = await resp.json();
+      const texto = (data.text || '').trim();
+      if (texto) {
+        setForm(f => ({ ...f, [fieldKey]: (f[fieldKey] ? f[fieldKey] + ' ' : '') + texto }));
+      } else {
+        showToast('Não entendi o áudio, tente de novo.');
+      }
+    } catch (err) {
+      showToast('Erro ao transcrever o áudio. Confira a chave da OpenAI em Configurações.');
+    } finally {
+      setTranscribingField(null);
+    }
+  };
 
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -3018,6 +3060,7 @@ function CaseStudyView({ customLogo, showToast }) {
 
   const CampoComMic = ({ fieldKey, label, labelPt, multiline }) => {
     const gravando = recordingField === fieldKey;
+    const transcrevendo = transcribingField === fieldKey;
     const Comp = multiline ? 'textarea' : 'input';
     return (
       <div>
@@ -3032,11 +3075,12 @@ function CaseStudyView({ customLogo, showToast }) {
           />
           <button
             type="button"
+            disabled={transcrevendo}
             onClick={() => gravando ? stopRecording() : startRecording(fieldKey)}
-            className={`w-10 h-10 shrink-0 rounded-lg flex items-center justify-center transition-all cursor-pointer ${gravando ? 'bg-rose-500 text-white animate-pulse' : 'bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white'}`}
-            title={gravando ? 'Parar gravação' : 'Gravar áudio e transcrever'}
+            className={`w-10 h-10 shrink-0 rounded-lg flex items-center justify-center transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait ${gravando ? 'bg-rose-500 text-white animate-pulse' : 'bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white'}`}
+            title={gravando ? 'Parar gravação' : transcrevendo ? 'Transcrevendo...' : 'Gravar áudio e transcrever'}
           >
-            {gravando ? <MicOff size={16} /> : <Mic size={16} />}
+            {transcrevendo ? <RefreshCw size={16} className="animate-spin" /> : gravando ? <MicOff size={16} /> : <Mic size={16} />}
           </button>
         </div>
       </div>
@@ -3154,10 +3198,15 @@ function CaseStudyView({ customLogo, showToast }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="p-4 lg:p-6 border-b bg-white flex items-center justify-between gap-3 flex-wrap">
           <button onClick={() => setIsListVisible(true)} className="lg:hidden bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 px-3 rounded-lg flex items-center gap-2 cursor-pointer text-sm"><ChevronLeft size={16} /> Lista</button>
+          {!apiKey && (
+            <button onClick={() => setActiveTab && setActiveTab('settings')} className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold px-3 py-2 rounded-lg cursor-pointer hover:bg-amber-100">
+              <AlertTriangle size={14} /> Configure a chave da OpenAI para gravar áudio
+            </button>
+          )}
           <div className="flex items-center gap-2 ml-auto">
             <select value={lang} onChange={e => setLang(e.target.value)} className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-2 outline-none cursor-pointer">
-              <option value="pt-BR">🎙️ Falar em Português</option>
-              <option value="en-US">🎙️ Speak in English</option>
+              <option value="pt">🎙️ Falar em Português</option>
+              <option value="en">🎙️ Speak in English</option>
             </select>
             <button onClick={handleSave} disabled={isSaving} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer text-sm disabled:opacity-50">{isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />} Salvar</button>
             <button onClick={handleDownloadPdf} disabled={isGenerating} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer text-sm disabled:opacity-50">{isGenerating ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />} Gerar PDF</button>
