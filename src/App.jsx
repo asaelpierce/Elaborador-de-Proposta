@@ -3361,9 +3361,7 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
       ${rodape('03')}
     </section>`;
 
-    const separador = `<div data-html2canvas-ignore="true" style="position:relative;height:0;border-top:2px dashed #94A3B8;margin:4px 0"></div>`;
-
-    return capa + separador + pagina01 + separador + pagina02 + separador + pagina03;
+    return capa + pagina01 + pagina02 + pagina03;
   };
 
   const handleDownloadPdf = async () => {
@@ -3371,7 +3369,7 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
     setIsGenerating(true);
     setTimeout(async () => {
       const el = document.getElementById('case-study-pdf-real');
-      const opt = { margin: 0, filename: `Estudo_Caso_${(form.cliente || form.titulo || 'projeto').replace(/\s+/g, '_')}.pdf`, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css', 'legacy'] } };
+      const opt = { margin: 0, filename: `Estudo_Caso_${(form.cliente || form.titulo || 'projeto').replace(/\s+/g, '_')}.pdf`, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css'] } };
       try { await window.html2pdf().set(opt).from(el).save(); showToast('Estudo de caso baixado!'); }
       catch (e) { showToast('Erro ao gerar PDF.'); }
       finally { setIsGenerating(false); }
