@@ -2635,6 +2635,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
   const [selectedId, setSelectedId] = useState(initialSelectedId || '');
   const [isGenerating, setIsGenerating] = useState(false);
   const [mostrarCodVale, setMostrarCodVale] = useState(true);
+  const [orientacaoFicha, setOrientacaoFicha] = useState('retrato');
   const [isListVisible, setIsListVisible] = useState(true);
 
   const eligibleProducts = useMemo(() => {
@@ -2665,7 +2666,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     setIsGenerating(true);
     setTimeout(async () => {
       const element = document.getElementById('ficha-tecnica-pdf-real');
-      const opt = { margin: 0, filename: `Ficha_Tecnica_${selectedProduct.codvale || selectedProduct.id}.pdf`, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css', 'legacy'] } };
+      const opt = { margin: 0, filename: `Ficha_Tecnica_${selectedProduct.codvale || selectedProduct.id}.pdf`, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: orientacaoFicha === 'paisagem' ? 'landscape' : 'portrait' }, pagebreak: { mode: ['css'] } };
       try { await window.html2pdf().set(opt).from(element).save(); showToast("Ficha Técnica baixada!"); }
       catch(e) { showToast("Erro ao gerar PDF."); }
       finally { setIsGenerating(false); }
@@ -2753,8 +2754,9 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     const logoSrc = customLogo || defaultLogoBase64;
     const subtituloTexto = selectedProduct.subtitulo || selectedProduct.category || '';
 
+    const alturaMinPagina = orientacaoFicha === 'paisagem' ? '210mm' : '297mm';
     const pagina1 = `
-    <section class="page" style="position:relative;padding:12mm 13mm 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:297mm">
+    <section class="page" style="position:relative;padding:12mm 13mm 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:${alturaMinPagina}">
       <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
         <img src="${logoSrc}" alt="Kalenborn Wear Protection Solutions" style="height:16mm;width:auto;display:block">
         <div style="text-align:right;line-height:1">
@@ -2806,7 +2808,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     </section>`;
 
     const pagina2 = `
-    <section class="page" style="position:relative;padding:12mm 13mm 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:297mm;page-break-before:always">
+    <section class="page" style="position:relative;padding:12mm 13mm 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:${alturaMinPagina};page-break-before:always">
       <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #111111;padding-bottom:6px;margin-bottom:11px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14pt;letter-spacing:.04em">${esc(nomeExibicao)}</div>
         <div style="font-size:8.5pt;color:#6B7280;letter-spacing:.1em;text-transform:uppercase">Ficha Técnica${mostrarCodVale ? ` · Cód. Vale ${esc(selectedProduct.codvale || '—')}` : ''}</div>
@@ -2878,9 +2880,13 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
                 <input type="checkbox" checked={mostrarCodVale} onChange={e => setMostrarCodVale(e.target.checked)} className="w-4 h-4 accent-blue-600 cursor-pointer" />
                 <span className="text-xs font-bold text-slate-600">Mostrar Cód. Vale</span>
               </label>
+              <div className="hidden sm:flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm gap-1">
+                <button type="button" onClick={() => setOrientacaoFicha('retrato')} className={`text-xs font-bold px-3 py-1.5 rounded-md cursor-pointer transition-all ${orientacaoFicha === 'retrato' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Retrato</button>
+                <button type="button" onClick={() => setOrientacaoFicha('paisagem')} className={`text-xs font-bold px-3 py-1.5 rounded-md cursor-pointer transition-all ${orientacaoFicha === 'paisagem' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Paisagem</button>
+              </div>
               <button onClick={handleDownload} disabled={isGenerating} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer ml-auto">{isGenerating ? <RefreshCw className="animate-spin" size={18} /> : <Download size={18} />} Baixar PDF</button>
             </div>
-            <div className="bg-white shadow-2xl mb-10 shrink-0 box-border" style={{ width: '210mm' }} id="ficha-tecnica-pdf-real">{renderFicha()}</div>
+            <div className="bg-white shadow-2xl mb-10 shrink-0 box-border" style={{ width: orientacaoFicha === 'paisagem' ? '297mm' : '210mm' }} id="ficha-tecnica-pdf-real">{renderFicha()}</div>
           </>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-slate-400"><Layers size={48} className="mb-4 opacity-50" /><p>Selecione uma peça na lista.</p></div>
