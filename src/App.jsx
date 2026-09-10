@@ -2661,15 +2661,56 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
 
   const selectedProduct = eligibleProducts.find(p => p.id === selectedId) || eligibleProducts[0];
 
+  // Espera as imagens de um container carregarem antes de tirar o "print"
+  const esperarImagensFicha = (container) => {
+    const imgs = Array.from(container.querySelectorAll('img'));
+    return Promise.all(imgs.map(img => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise(resolve => {
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+        setTimeout(resolve, 8000);
+      });
+    }));
+  };
+
   const handleDownload = async () => {
     if (!window.html2pdf || !selectedProduct) return;
     setIsGenerating(true);
     setTimeout(async () => {
-      const element = document.getElementById('ficha-tecnica-pdf-real');
-      const opt = { margin: 0, filename: `Ficha_Tecnica_${selectedProduct.codvale || selectedProduct.id}.pdf`, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: orientacaoFicha === 'paisagem' ? 'landscape' : 'portrait' }, pagebreak: { mode: ['css'] } };
-      try { await window.html2pdf().set(opt).from(element).save(); showToast("Ficha Técnica baixada!"); }
-      catch(e) { showToast("Erro ao gerar PDF."); }
-      finally { setIsGenerating(false); }
+      try {
+        const container = document.getElementById('ficha-tecnica-pdf-real');
+        const elementos = Array.from(container.querySelectorAll('section.page'));
+        if (elementos.length === 0) throw new Error('Nada para exportar.');
+
+        await Promise.all(elementos.map(esperarImagensFicha));
+
+        const orientation = orientacaoFicha === 'paisagem' ? 'landscape' : 'portrait';
+        const largura = orientacaoFicha === 'paisagem' ? 297 : 210;
+        const altura = orientacaoFicha === 'paisagem' ? 210 : 297;
+        const opt = { margin: 0, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation } };
+
+        // A primeira página vira a base do PDF. Removemos qualquer página extra
+        // que o html2pdf tenha criado sozinho por arredondamento de altura.
+        const pdf = await window.html2pdf().set(opt).from(elementos[0]).toPdf().get('pdf');
+        while (pdf.internal.getNumberOfPages() > 1) {
+          pdf.deletePage(pdf.internal.getNumberOfPages());
+        }
+
+        // As demais páginas entram manualmente, uma por uma
+        for (let i = 1; i < elementos.length; i++) {
+          const canvas = await window.html2pdf().set(opt).from(elementos[i]).toCanvas().get('canvas');
+          pdf.addPage([largura, altura], orientation);
+          pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, largura, altura);
+        }
+
+        pdf.save(`Ficha_Tecnica_${selectedProduct.codvale || selectedProduct.id}.pdf`);
+        showToast("Ficha Técnica baixada!");
+      } catch (e) {
+        showToast("Erro ao gerar PDF.");
+      } finally {
+        setIsGenerating(false);
+      }
     }, 100);
   };
 
