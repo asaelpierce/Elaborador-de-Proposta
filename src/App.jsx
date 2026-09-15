@@ -8,7 +8,7 @@ import {
   Handshake, Clock, FileWarning, Key, Box, Camera, Ruler, 
   Info, Grid, Wrench, Video, Layers, Minimize2, Maximize2, 
   RefreshCw, Move, ChevronLeft, ChevronRight, Edit, ChevronDown,
-  Package, Archive, DollarSign, ShieldAlert, Upload, Eye, Mic, MicOff
+  Package, Archive, DollarSign, ShieldAlert, Upload, Eye, Mic, MicOff, Share2
 } from 'lucide-react';
 
 const SUPABASE_URL = "https://iwpsxftmwbsvjdktlidk.supabase.co/";
@@ -3413,6 +3413,99 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
     return { capa, pagina01, pagina02, pagina03 };
   };
 
+  // ===== Formato LinkedIn — 3 lâminas quadradas (1080x1080px), visual e resumido =====
+  const gerarHtmlLinkedin = () => {
+    const logoImg = customLogo || defaultLogoBase64;
+    const F = 'Helvetica Neue,Helvetica,Arial,sans-serif';
+    const fotos = garantirFotosObjeto(form.fotos);
+    const val = (v) => esc(v || '—');
+    const S = 1080;
+
+    const imgOrPh = (foto, txt) => foto?.url
+      ? `<img src="${esc(foto.url)}" style="width:100%;height:100%;object-fit:cover;display:block">`
+      : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;background:#2A2A2A;color:#8A8A8A;font-size:16px;padding:20px;box-sizing:border-box">${esc(txt)}</div>`;
+
+    const marcaTopo = `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:44px 48px 0 48px">
+        <div style="display:flex;align-items:center;gap:14px">
+          <img src="${logoImg}" alt="Kalenborn" style="height:34px;width:auto;filter:brightness(0) invert(1)">
+        </div>
+        <div style="font-size:13px;letter-spacing:0.22em;text-transform:uppercase;color:#FFD100;font-weight:700">Estudo de caso</div>
+      </div>`;
+
+    const slide1 = `
+    <section style="width:${S}px;height:${S}px;box-sizing:border-box;background:#111111;color:#fff;font-family:${F};position:relative;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+      <div style="position:absolute;inset:0">${imgOrPh(fotos.capa, '')}</div>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.75) 0%,rgba(0,0,0,0.25) 38%,rgba(0,0,0,0.35) 60%,rgba(0,0,0,0.92) 100%)"></div>
+      <div style="position:relative;height:100%;display:flex;flex-direction:column;justify-content:space-between">
+        ${marcaTopo}
+        <div style="padding:0 56px 64px 56px">
+          <div style="width:64px;height:6px;background:#FFD100;margin-bottom:22px"></div>
+          <div style="font-size:15px;letter-spacing:0.16em;text-transform:uppercase;color:#D6D6D6;margin-bottom:8px">${val(form.cliente)}</div>
+          <h1 style="margin:0;font-size:52px;line-height:1.14;font-weight:800;letter-spacing:-0.01em">${esc(form.titulo || 'Título do projeto de aplicação')}</h1>
+          <p style="margin:20px 0 0 0;font-size:20px;line-height:1.5;color:#E4E4E4;max-width:820px">${esc(form.resumo || '')}</p>
+        </div>
+      </div>
+    </section>`;
+
+    const chipVal = (label, valor) => `
+      <div style="background:#1B1B1B;border-radius:14px;padding:20px 22px">
+        <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#8A8A8A;font-weight:700">${label}</div>
+        <div style="font-size:19px;font-weight:700;margin-top:8px;color:#fff">${val(valor)}</div>
+      </div>`;
+
+    const slide2 = `
+    <section style="width:${S}px;height:${S}px;box-sizing:border-box;background:#111111;color:#fff;font-family:${F};position:relative;overflow:hidden">
+      <div style="height:100%;display:flex;flex-direction:column">
+        ${marcaTopo}
+        <div style="padding:36px 56px 0 56px">
+          <span style="background:#FFD100;color:#111;font-weight:800;font-size:13px;padding:5px 11px;border-radius:6px">O DESAFIO</span>
+          <p style="margin:14px 0 0 0;font-size:21px;line-height:1.55;color:#E4E4E4;max-width:960px">${esc((form.description || 'Descreva o contexto da aplicação e o histórico de desgaste.').slice(0, 260))}${(form.description || '').length > 260 ? '…' : ''}</p>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:30px 56px 0 56px">
+          ${chipVal('Segmento', form.industry)}
+          ${chipVal('Componente', form.component)}
+        </div>
+        <div style="flex:1;min-height:0;margin:32px 56px 0 56px;position:relative;border-radius:16px;overflow:hidden">${imgOrPh(fotos.antes, 'Foto — antes da aplicação')}</div>
+        <div style="padding:22px 56px 44px 56px;display:flex;align-items:center;gap:12px">
+          <span style="background:#fff;color:#111;font-weight:800;font-size:13px;padding:5px 11px;border-radius:6px">A SOLUÇÃO</span>
+          <span style="font-size:17px;color:#D6D6D6;font-weight:600">${val(form.lining_material)}</span>
+        </div>
+      </div>
+    </section>`;
+
+    const resultLinha = (txt) => txt ? `
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <div style="width:8px;height:8px;border-radius:50%;background:#FFD100;margin-top:9px;flex-shrink:0"></div>
+        <div style="font-size:19px;line-height:1.5;color:#fff">${esc(txt)}</div>
+      </div>` : '';
+
+    const slide3 = `
+    <section style="width:${S}px;height:${S}px;box-sizing:border-box;background:#111111;color:#fff;font-family:${F};position:relative;overflow:hidden">
+      <div style="height:100%;display:flex;flex-direction:column">
+        ${marcaTopo}
+        <div style="padding:36px 56px 0 56px">
+          <span style="background:#FFD100;color:#111;font-weight:800;font-size:13px;padding:5px 11px;border-radius:6px">RESULTADO</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px;padding:22px 56px 0 56px">
+          ${resultLinha(form.resultado_vida_util) || resultLinha('Maior vida útil do revestimento')}
+          ${resultLinha(form.resultado_reducao_paradas) || resultLinha('Redução de paradas de manutenção')}
+          ${resultLinha(form.resultado_ganho_operacional) || resultLinha('Ganho operacional observado')}
+        </div>
+        <div style="flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:28px 56px 0 56px">
+          <div style="position:relative;border-radius:16px;overflow:hidden">${imgOrPh(fotos.solucao, 'Foto — solução aplicada')}</div>
+          <div style="position:relative;border-radius:16px;overflow:hidden">${imgOrPh(fotos.depois, 'Foto — depois da aplicação')}</div>
+        </div>
+        <div style="padding:26px 56px 44px 56px;border-top:1px solid #2A2A2A;margin-top:26px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:16px;color:#D6D6D6">Fale com a Kalenborn sobre proteção contra desgaste</div>
+          <div style="font-size:15px;color:#8A8A8A">${val(form.kalenborn_reference)}</div>
+        </div>
+      </div>
+    </section>`;
+
+    return { slide1, slide2, slide3 };
+  };
+
   // Espera todas as imagens de um container carregarem de verdade antes de
   // tirar o "print" — evita fotos quebradas/em branco no PDF por causa de
   // rede lenta (fotos vêm do Supabase Storage, às vezes demoram a carregar).
@@ -3481,6 +3574,40 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
     }, 100);
   };
 
+  const [isGeneratingLinkedin, setIsGeneratingLinkedin] = useState(false);
+  const handleDownloadLinkedin = async () => {
+    if (!window.html2pdf) { showToast('Biblioteca de PDF ainda não carregou, tenta de novo em alguns segundos.'); return; }
+    setIsGeneratingLinkedin(true);
+    setTimeout(async () => {
+      try {
+        const opt = { margin: 0, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'px', format: [1080, 1080], orientation: 'portrait' } };
+        const idsSlides = ['case-study-li-slide-1', 'case-study-li-slide-2', 'case-study-li-slide-3'];
+        const elementos = idsSlides.map(id => document.getElementById(id)).filter(Boolean);
+        if (elementos.length === 0) throw new Error('Nada para exportar.');
+
+        await Promise.all(elementos.map(esperarImagens));
+
+        const pdf = await window.html2pdf().set(opt).from(elementos[0]).toPdf().get('pdf');
+        while (pdf.internal.getNumberOfPages() > 1) {
+          pdf.deletePage(pdf.internal.getNumberOfPages());
+        }
+
+        for (let i = 1; i < elementos.length; i++) {
+          const canvas = await window.html2pdf().set(opt).from(elementos[i]).toCanvas().get('canvas');
+          pdf.addPage([1080, 1080], 'portrait');
+          pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 1080, 1080);
+        }
+
+        pdf.save(`Estudo_Caso_LinkedIn_${(form.cliente || form.titulo || 'projeto').replace(/\s+/g, '_')}.pdf`);
+        showToast('Versão para LinkedIn baixada! É só subir como "documento" no post.');
+      } catch (e) {
+        showToast('Erro ao gerar versão para LinkedIn.');
+      } finally {
+        setIsGeneratingLinkedin(false);
+      }
+    }, 100);
+  };
+
   return (
     <div className="flex h-full w-full bg-slate-100 overflow-hidden relative">
       <div className={`bg-white flex flex-col h-full shadow-2xl z-40 shrink-0 transition-all duration-500 ${isListVisible ? 'w-full lg:w-[320px] translate-x-0 border-r border-slate-200' : 'w-0 -translate-x-full border-none overflow-hidden'}`}>
@@ -3522,6 +3649,7 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
             <button onClick={handleGerarRascunhoIA} disabled={isDraftingAI} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer text-sm disabled:opacity-50">{isDraftingAI ? <RefreshCw size={16} className="animate-spin" /> : <Bot size={16} />} Gerar rascunho com IA</button>
             <button onClick={handleSave} disabled={isSaving} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer text-sm disabled:opacity-50">{isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />} Salvar</button>
             <button onClick={handleDownloadPdf} disabled={isGenerating} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer text-sm disabled:opacity-50">{isGenerating ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />} Gerar PDF</button>
+            <button onClick={handleDownloadLinkedin} disabled={isGeneratingLinkedin} title="Gera 3 lâminas quadradas (1080x1080) prontas pra postar como documento no LinkedIn" className="bg-[#0A66C2] hover:bg-[#0955a5] text-white font-bold py-2.5 px-4 rounded-lg shadow-sm flex items-center gap-2 cursor-pointer text-sm disabled:opacity-50">{isGeneratingLinkedin ? <RefreshCw size={16} className="animate-spin" /> : <Share2 size={16} />} Baixar para LinkedIn</button>
           </div>
         </div>
 
@@ -3641,6 +3769,15 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
             <div id="case-study-page-1" style={{ width: '210mm', height: '297mm', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: paginas.pagina01 }} />
             <div id="case-study-page-2" style={{ width: '210mm', height: '297mm', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: paginas.pagina02 }} />
             <div id="case-study-page-3" style={{ width: '210mm', height: '297mm', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: paginas.pagina03 }} />
+          </>
+        ); })()}
+      </div>
+      <div style={{ position: 'fixed', top: 0, left: '-99999px', width: '1080px' }}>
+        {(() => { const slides = gerarHtmlLinkedin(); return (
+          <>
+            <div id="case-study-li-slide-1" style={{ width: '1080px', height: '1080px', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: slides.slide1 }} />
+            <div id="case-study-li-slide-2" style={{ width: '1080px', height: '1080px', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: slides.slide2 }} />
+            <div id="case-study-li-slide-3" style={{ width: '1080px', height: '1080px', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: slides.slide3 }} />
           </>
         ); })()}
       </div>
