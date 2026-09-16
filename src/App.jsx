@@ -2795,67 +2795,85 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     const logoSrc = customLogo || defaultLogoBase64;
     const subtituloTexto = selectedProduct.subtitulo || selectedProduct.category || '';
 
+    const temPagina2 = composicao.length > 0;
     const alturaMinPagina = orientacaoFicha === 'paisagem' ? '210mm' : '297mm';
     const pagina1 = `
-    <section class="page" style="position:relative;padding:12mm 13mm 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:${alturaMinPagina}">
+    <section class="page" style="position:relative;padding:11mm 13mm 16mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:${alturaMinPagina}">
       <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
-        <img src="${logoSrc}" alt="Kalenborn Wear Protection Solutions" style="height:16mm;width:auto;display:block">
+        <img src="${logoSrc}" alt="Kalenborn Wear Protection Solutions" style="height:14mm;width:auto;display:block">
         <div style="text-align:right;line-height:1">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:23pt;letter-spacing:.02em;color:#1B3A6B">FICHA TÉCNICA</div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:500;font-size:11.5pt;letter-spacing:.14em;color:#8A9099;margin-top:3px">TECHNICAL DATA SHEET</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:21pt;letter-spacing:.02em;color:#1B3A6B">FICHA TÉCNICA</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:500;font-size:10.5pt;letter-spacing:.14em;color:#8A9099;margin-top:2px">TECHNICAL DATA SHEET</div>
         </div>
       </div>
 
-      <div style="height:3px;background:#111111;margin:7px 0 0"></div>
-      <div style="height:3px;background:#FFD200;margin:2px 0 10px"></div>
+      <div style="height:3px;background:#111111;margin:6px 0 0"></div>
+      <div style="height:3px;background:#FFD200;margin:2px 0 8px"></div>
 
-      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:9px">
-        <h1 style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:21pt;letter-spacing:.01em">${esc(nomeExibicao)}</h1>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:7px">
+        <h1 style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19pt;letter-spacing:.01em">${esc(nomeExibicao)}</h1>
         <div style="font-size:9.5pt;color:#6B7280;white-space:nowrap">${esc(subtituloTexto)}</div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(${mostrarCodVale ? 4 : 3},1fr);gap:1px;background:#C9CDD3;border:1px solid #C9CDD3;margin-bottom:11px">
-        ${mostrarCodVale ? `<div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Cód. Vale</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.codvale || '—')}</div></div>` : ''}
-        <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Cód. Kalenborn</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.codkalenborn || selectedProduct.id || '—')}</div></div>
-        <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">NCM</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.ncm || '—')}</div></div>
-        <div style="background:#F5F6F7;padding:5px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Unidade</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.um || 'UN')}</div></div>
+      <div style="display:grid;grid-template-columns:repeat(${mostrarCodVale ? 4 : 3},1fr);gap:1px;background:#C9CDD3;border:1px solid #C9CDD3;margin-bottom:8px">
+        ${mostrarCodVale ? `<div style="background:#F5F6F7;padding:4px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Cód. Vale</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.codvale || '—')}</div></div>` : ''}
+        <div style="background:#F5F6F7;padding:4px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Cód. Kalenborn</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.codkalenborn || selectedProduct.id || '—')}</div></div>
+        <div style="background:#F5F6F7;padding:4px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">NCM</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.ncm || '—')}</div></div>
+        <div style="background:#F5F6F7;padding:4px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Unidade</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.um || 'UN')}</div></div>
       </div>
 
-      <div style="display:grid;grid-template-columns:74mm 1fr;gap:8mm;align-items:start">
-        <div style="display:flex;flex-direction:column;gap:6px">
+      <div style="display:grid;grid-template-columns:70mm 1fr;gap:7mm;align-items:start">
+        <div style="display:flex;flex-direction:column;gap:5px">
           <div style="border:1px solid #C9CDD3;background:#FBFBFC;padding:4px">
-            <div style="width:100%;height:66mm;display:flex;align-items:center;justify-content:center;overflow:hidden">${imgProduto}</div>
+            <div style="width:100%;height:52mm;display:flex;align-items:center;justify-content:center;overflow:hidden">${imgProduto}</div>
           </div>
-          <div style="font-size:8pt;color:#6B7280;line-height:1.35">Figura 1 — Vista isométrica do produto.</div>
+          <div style="font-size:7.5pt;color:#6B7280;line-height:1.3">Figura 1 — Vista isométrica do produto.</div>
           ${camadasHtml}
         </div>
 
         <div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:3px;margin-bottom:7px">Descrição<span style="color:#8A9099;font-weight:500"> / Description</span></div>
-          <p style="margin:0;font-size:10.5pt;line-height:1.45;text-align:justify">${boldKeywords(selectedProduct.caracteristica || selectedProduct.descricao_original || 'Sem descrição cadastrada.')}</p>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:2px;margin-bottom:5px">Descrição<span style="color:#8A9099;font-weight:500"> / Description</span></div>
+          <p style="margin:0;font-size:10pt;line-height:1.4;text-align:justify">${boldKeywords(selectedProduct.caracteristica || selectedProduct.descricao_original || 'Sem descrição cadastrada.')}</p>
 
           ${propriedades.length > 0 ? `
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:3px;margin:13px 0 0">Características<span style="color:#8A9099;font-weight:500"> / Features</span></div>
-          <table style="width:100%;border-collapse:collapse;font-size:9.5pt;margin-top:4px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:2px;margin:9px 0 0">Características<span style="color:#8A9099;font-weight:500"> / Features</span></div>
+          <table style="width:100%;border-collapse:collapse;font-size:9.5pt;margin-top:3px">
             <tbody>${featuresRows}</tbody>
           </table>` : ''}
         </div>
       </div>
 
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:10px">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11pt;letter-spacing:.07em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:2px;margin-bottom:5px">Aplicação recomendada<span style="color:#8A9099;font-weight:500"> / Application</span></div>
+          <ul style="margin:0;padding-left:14px;font-size:9.3pt;line-height:1.35;display:flex;flex-direction:column;gap:2px">${liItems(aplicacao)}</ul>
+        </div>
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11pt;letter-spacing:.07em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:2px;margin-bottom:5px">Instruções de montagem<span style="color:#8A9099;font-weight:500"> / Mounting</span></div>
+          <ol style="margin:0;padding-left:15px;font-size:9.3pt;line-height:1.35;display:flex;flex-direction:column;gap:2px">${liItems(montagem)}</ol>
+        </div>
+      </div>
+
+      <div style="margin-top:9px;border:1px solid #C9CDD3;border-left:3px solid #FFD200;background:#FAFAF6;padding:6px 10px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:10.5pt;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">Observações<span style="color:#8A9099;font-weight:500"> / Notes</span></div>
+        <ul style="margin:0;padding-left:14px;font-size:8.8pt;line-height:1.3;display:flex;flex-direction:column;gap:1.5px;color:#3A3F46">${liItems(observ)}</ul>
+      </div>
+
+      ${selectedProduct.garantia ? `<div style="font-size:8.8pt;color:#6B7280;margin-top:8px"><strong style="color:#111111">Garantia:</strong> ${esc(selectedProduct.garantia)}</div>` : ''}
+
       <div style="position:absolute;left:13mm;right:13mm;bottom:8mm;border-top:1px solid #C9CDD3;padding-top:5px;display:flex;justify-content:space-between;align-items:center;font-size:7.5pt;color:#6B7280;line-height:1.3">
         <div><strong style="color:#111111">KALENBORN DO BRASIL LTDA</strong> · Estrada Antiga BH — Pedro Leopoldo, 1150, Galpão 03 · Vespasiano / MG<br>+55 31 3499-4000 · comercial@kalenborn.com.br · www.kalenborn.com.br</div>
-        <div style="text-align:right;white-space:nowrap">Página 1 de 2</div>
+        <div style="text-align:right;white-space:nowrap">Página 1 de ${temPagina2 ? 2 : 1}</div>
       </div>
     </section>`;
 
-    const pagina2 = `
+    const pagina2 = temPagina2 ? `
     <section class="page" style="position:relative;padding:12mm 13mm 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:${alturaMinPagina};page-break-before:always">
       <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #111111;padding-bottom:6px;margin-bottom:11px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14pt;letter-spacing:.04em">${esc(nomeExibicao)}</div>
         <div style="font-size:8.5pt;color:#6B7280;letter-spacing:.1em;text-transform:uppercase">Ficha Técnica${mostrarCodVale ? ` · Cód. Vale ${esc(selectedProduct.codvale || '—')}` : ''}</div>
       </div>
 
-      ${composicao.length > 0 ? `
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5pt;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px">Propriedades do produto<span style="color:#8A9099;font-weight:500"> / Product properties</span></div>
       ${selectedProduct.propriedades_subtitulo ? `<div style="font-size:8.5pt;color:#6B7280;margin-bottom:6px">${esc(selectedProduct.propriedades_subtitulo)}</div>` : ''}
       <table style="width:100%;border-collapse:collapse;font-size:9.5pt;border:1px solid #C9CDD3">
@@ -2868,33 +2886,15 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
         </thead>
         <tbody>${propsRows}</tbody>
       </table>
-      <div style="font-size:7.5pt;color:#8A9099;margin-top:4px;line-height:1.35">Valores típicos de laboratório, não constituem especificação de fornecimento.</div>` : ''}
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:11px">
-        <div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:3px;margin-bottom:6px">Aplicação recomendada<span style="color:#8A9099;font-weight:500"> / Application</span></div>
-          <ul style="margin:0;padding-left:15px;font-size:9.5pt;line-height:1.45;display:flex;flex-direction:column;gap:3px">${liItems(aplicacao)}</ul>
-        </div>
-        <div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:3px;margin-bottom:6px">Instruções de montagem<span style="color:#8A9099;font-weight:500"> / Mounting</span></div>
-          <ol style="margin:0;padding-left:16px;font-size:9.5pt;line-height:1.45;display:flex;flex-direction:column;gap:3px">${liItems(montagem)}</ol>
-        </div>
-      </div>
-
-      <div style="margin-top:11px;border:1px solid #C9CDD3;border-left:3px solid #FFD200;background:#FAFAF6;padding:8px 11px">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;letter-spacing:.07em;text-transform:uppercase;margin-bottom:4px">Observações<span style="color:#8A9099;font-weight:500"> / Notes</span></div>
-        <ul style="margin:0;padding-left:15px;font-size:9pt;line-height:1.4;display:flex;flex-direction:column;gap:2px;color:#3A3F46">${liItems(observ)}</ul>
-      </div>
-
-      ${selectedProduct.garantia ? `<div style="font-size:9pt;color:#6B7280;margin-top:11px"><strong style="color:#111111">Garantia:</strong> ${esc(selectedProduct.garantia)}</div>` : ''}
+      <div style="font-size:7.5pt;color:#8A9099;margin-top:4px;line-height:1.35">Valores típicos de laboratório, não constituem especificação de fornecimento.</div>
 
       <div style="position:absolute;left:13mm;right:13mm;bottom:8mm;border-top:1px solid #C9CDD3;padding-top:5px;display:flex;justify-content:space-between;align-items:center;font-size:7.5pt;color:#6B7280;line-height:1.3">
         <div><strong style="color:#111111">KALENBORN DO BRASIL LTDA</strong> · Estrada Antiga BH — Pedro Leopoldo, 1150, Galpão 03 · Vespasiano / MG<br>+55 31 3499-4000 · comercial@kalenborn.com.br · www.kalenborn.com.br</div>
         <div style="text-align:right;white-space:nowrap">Página 2 de 2</div>
       </div>
-    </section>`;
+    </section>` : '';
 
-    const separadorTela = `<div data-html2canvas-ignore="true" style="position:relative;height:0;border-top:2px dashed #94A3B8;margin:4px 0"><span style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:#fff;padding:0 12px;font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748B;text-transform:uppercase;white-space:nowrap">Fim da página 1 · Início da página 2</span></div>`;
+    const separadorTela = temPagina2 ? `<div data-html2canvas-ignore="true" style="position:relative;height:0;border-top:2px dashed #94A3B8;margin:4px 0"><span style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:#fff;padding:0 12px;font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748B;text-transform:uppercase;white-space:nowrap">Fim da página 1 · Início da página 2</span></div>` : '';
 
     return <div dangerouslySetInnerHTML={{ __html: pagina1 + separadorTela + pagina2 }} />;
   };
