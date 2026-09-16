@@ -2685,23 +2685,34 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
 
         await Promise.all(elementos.map(esperarImagensFicha));
 
-        const orientation = orientacaoFicha === 'paisagem' ? 'landscape' : 'portrait';
-        const largura = orientacaoFicha === 'paisagem' ? 297 : 210;
-        const altura = orientacaoFicha === 'paisagem' ? 210 : 297;
-        const opt = { margin: 0, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation } };
+        const larguraMM = orientacaoFicha === 'paisagem' ? 297 : 210;
+        const optCanvas = { html2canvas: { scale: 2, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 } };
 
-        // A primeira página vira a base do PDF. Removemos qualquer página extra
-        // que o html2pdf tenha criado sozinho por arredondamento de altura.
-        const pdf = await window.html2pdf().set(opt).from(elementos[0]).toPdf().get('pdf');
+        // Captura cada página como imagem e calcula a altura REAL do conteúdo
+        // (em vez de forçar um tamanho fixo de A4, que espremia ou cortava
+        // quando o conteúdo passava um pouco da altura padrão).
+        const canvases = [];
+        for (const el of elementos) {
+          const canvas = await window.html2pdf().set(optCanvas).from(el).toCanvas().get('canvas');
+          canvases.push(canvas);
+        }
+
+        const alturaMM = (canvas) => (canvas.height / canvas.width) * larguraMM;
+        const primeiraAltura = alturaMM(canvases[0]);
+
+        // A primeira página já nasce do tamanho exato do conteúdo dela
+        const pdf = await window.html2pdf()
+          .set({ jsPDF: { unit: 'mm', format: [larguraMM, primeiraAltura], orientation: primeiraAltura >= larguraMM ? 'portrait' : 'landscape' } })
+          .from(elementos[0]).toPdf().get('pdf');
         while (pdf.internal.getNumberOfPages() > 1) {
           pdf.deletePage(pdf.internal.getNumberOfPages());
         }
 
-        // As demais páginas entram manualmente, uma por uma
-        for (let i = 1; i < elementos.length; i++) {
-          const canvas = await window.html2pdf().set(opt).from(elementos[i]).toCanvas().get('canvas');
-          pdf.addPage([largura, altura], orientation);
-          pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, largura, altura);
+        // As demais páginas entram manualmente, cada uma com a sua própria altura real
+        for (let i = 1; i < canvases.length; i++) {
+          const altura = alturaMM(canvases[i]);
+          pdf.addPage([larguraMM, altura], altura >= larguraMM ? 'portrait' : 'landscape');
+          pdf.addImage(canvases[i].toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, larguraMM, altura);
         }
 
         pdf.save(`Ficha_Tecnica_${selectedProduct.codvale || selectedProduct.id}.pdf`);
