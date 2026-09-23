@@ -2059,7 +2059,7 @@ function BuilderView({ clients, products, observations, currentProposal, setCurr
       await new Promise(resolve => setTimeout(resolve, 150));
       const element = document.getElementById('documento-pdf-real');
       if (!element) { showToast("Erro: conteúdo do PDF não encontrado."); if (wrapper) wrapper.style.transform = originalTransform; setIsGeneratingPDF(false); return; }
-      const opt = { margin: 0, filename: `Proposta_Kalenborn_${currentProposal?.numeroUnico || 'Comercial'}.pdf`, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, dpi: 300, letterRendering: true, useCORS: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
+      const opt = { margin: 0, filename: `Proposta_Kalenborn_${currentProposal?.numeroUnico || 'Comercial'}.pdf`, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 3, dpi: 300, letterRendering: true, useCORS: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
       try {
         const worker = window.html2pdf().set(opt).from(element);
         await worker.save();
@@ -2686,7 +2686,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
         await Promise.all(elementos.map(esperarImagensFicha));
 
         const larguraMM = orientacaoFicha === 'paisagem' ? 297 : 210;
-        const optCanvas = { html2canvas: { scale: 2, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 } };
+        const optCanvas = { html2canvas: { scale: 3, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 } };
 
         // Captura cada página como imagem e calcula a altura REAL do conteúdo
         // (em vez de forçar um tamanho fixo de A4, que espremia ou cortava
@@ -3540,7 +3540,7 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
     setIsGenerating(true);
     setTimeout(async () => {
       try {
-        const opt = { margin: 0, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
+        const opt = { margin: 0, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 3, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
         const idsPaginas = ['case-study-page-0-capa', 'case-study-page-1', 'case-study-page-2', 'case-study-page-3'];
         const elementos = idsPaginas.map(id => document.getElementById(id)).filter(Boolean);
         if (elementos.length === 0) throw new Error('Nada para exportar.');
@@ -3591,7 +3591,7 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
     setIsGeneratingLinkedin(true);
     setTimeout(async () => {
       try {
-        const opt = { margin: 0, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'px', format: [1080, 1080], orientation: 'portrait' } };
+        const opt = { margin: 0, image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 3, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'px', format: [1080, 1080], orientation: 'portrait' } };
         const idsSlides = ['case-study-li-slide-1', 'case-study-li-slide-2', 'case-study-li-slide-3'];
         const elementos = idsSlides.map(id => document.getElementById(id)).filter(Boolean);
         if (elementos.length === 0) throw new Error('Nada para exportar.');
