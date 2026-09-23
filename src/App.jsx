@@ -2777,7 +2777,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     };
 
     const imgProduto = selectedProduct.imagem_url
-      ? `<img src="${esc(selectedProduct.imagem_url)}" style="max-width:100%;max-height:100%;object-fit:contain">`
+      ? `<img src="${esc(selectedProduct.imagem_url)}" crossorigin="anonymous" style="max-width:100%;max-height:100%;object-fit:contain">`
       : `<span style="color:#B4B8BE;font-size:9pt;font-style:italic">Foto ou desenho do produto</span>`;
 
     const camadasHtml = camadas.length > 0 ? `
@@ -2811,7 +2811,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     const pagina1 = `
     <section class="page" style="position:relative;padding:11mm 13mm 16mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:${alturaMinPagina}">
       <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
-        <img src="${logoSrc}" alt="Kalenborn Wear Protection Solutions" style="height:14mm;width:auto;display:block">
+        <img src="${logoSrc}" alt="Kalenborn Wear Protection Solutions" crossorigin="anonymous" style="height:14mm;width:auto;display:block">
         <div style="text-align:right;line-height:1">
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:21pt;letter-spacing:.02em;color:#1B3A6B">FICHA TÉCNICA</div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:500;font-size:10.5pt;letter-spacing:.14em;color:#8A9099;margin-top:2px">TECHNICAL DATA SHEET</div>
@@ -3250,12 +3250,12 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
     const val = (v) => esc(v || '—');
 
     const imgOrPlaceholder = (foto, placeholderTexto, extraStyle = '') => foto?.url
-      ? `<img src="${esc(foto.url)}" style="width:100%;height:100%;object-fit:cover;display:block${extraStyle}">`
+      ? `<img src="${esc(foto.url)}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:cover;display:block${extraStyle}">`
       : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;background:#F4F4F2;color:#8A8A8A;font-size:9pt;padding:4mm;box-sizing:border-box">${esc(placeholderTexto)}</div>`;
 
     const rodape = (numero) => `
       <div style="display:flex;justify-content:space-between;font-size:7pt;letter-spacing:0.16em;text-transform:uppercase;color:#8A8A8A;border-top:0.3mm solid #DCDCDC;padding-top:4mm;position:absolute;left:16mm;right:16mm;bottom:10mm">
-        <span style="display:flex;align-items:center;gap:3mm"><img src="${logoImg}" alt="Kalenborn" style="display:block;width:20mm;height:auto"><span>Estudo de caso</span></span>
+        <span style="display:flex;align-items:center;gap:3mm"><img src="${logoImg}" alt="Kalenborn" crossorigin="anonymous" style="display:block;width:20mm;height:auto"><span>Estudo de caso</span></span>
         <span>${numero}</span>
       </div>`;
 
@@ -3433,13 +3433,13 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
     const S = 1080;
 
     const imgOrPh = (foto, txt) => foto?.url
-      ? `<img src="${esc(foto.url)}" style="width:100%;height:100%;object-fit:cover;display:block">`
+      ? `<img src="${esc(foto.url)}" crossorigin="anonymous" style="width:100%;height:100%;object-fit:cover;display:block">`
       : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;background:#2A2A2A;color:#8A8A8A;font-size:16px;padding:20px;box-sizing:border-box">${esc(txt)}</div>`;
 
     const marcaTopo = `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:44px 48px 0 48px">
         <div style="display:flex;align-items:center;gap:14px">
-          <img src="${logoImg}" alt="Kalenborn" style="height:34px;width:auto;filter:brightness(0) invert(1)">
+          <img src="${logoImg}" alt="Kalenborn" crossorigin="anonymous" style="height:34px;width:auto;filter:brightness(0) invert(1)">
         </div>
         <div style="font-size:13px;letter-spacing:0.22em;text-transform:uppercase;color:#FFD100;font-weight:700">Estudo de caso</div>
       </div>`;
