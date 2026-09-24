@@ -2748,7 +2748,8 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
         pdf.save(`Ficha_Tecnica_${selectedProduct.codvale || selectedProduct.id}.pdf`);
         showToast("Ficha Técnica baixada!");
       } catch (e) {
-        showToast("Erro ao gerar PDF.");
+        console.error('Erro ao gerar Ficha Técnica:', e);
+        showToast(`Erro ao gerar PDF: ${e?.message || e}`);
       } finally {
         if (restaurarImagens) restaurarImagens();
         setIsGenerating(false);
@@ -3609,7 +3610,8 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
         pdf.save(`Estudo_Caso_${(form.cliente || form.titulo || 'projeto').replace(/\s+/g, '_')}.pdf`);
         showToast('Estudo de caso baixado!');
       } catch (e) {
-        showToast('Erro ao gerar PDF.');
+        console.error('Erro ao gerar Estudo de Caso:', e);
+        showToast(`Erro ao gerar PDF: ${e?.message || e}`);
       } finally {
         setIsGenerating(false);
       }
