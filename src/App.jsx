@@ -2726,17 +2726,18 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
           canvases.push(canvas);
         }
         const alturaMM = (canvas) => (canvas.height / canvas.width) * larguraMM;
-
-        // Pega a "classe" do gerador de PDF através de uma página descartável —
-        // depois montamos o documento de verdade na mão, só com [largura, altura]
-        // exatos por página, sem passar orientação (misturar as duas coisas é o
-        // que fazia o PDF em paisagem sair espremido numa folha de retrato).
-        const paginaDescartavel = await window.html2pdf().set({ jsPDF: { unit: 'mm', format: 'a4' } }).from(elementos[0]).toPdf().get('pdf');
-        const JsPDFCtor = paginaDescartavel.constructor;
-
         const primeiraAltura = alturaMM(canvases[0]);
-        const pdf = new JsPDFCtor({ unit: 'mm', format: [larguraMM, primeiraAltura] });
-        pdf.addImage(canvases[0].toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, larguraMM, primeiraAltura);
+
+        // A primeira página já nasce do tamanho exato do conteúdo dela.
+        // Importante: passamos SÓ o formato [largura, altura] customizado,
+        // sem nenhum campo de orientação junto — misturar as duas coisas é
+        // o que fazia o PDF em paisagem sair espremido numa folha de retrato.
+        const pdf = await window.html2pdf()
+          .set({ jsPDF: { unit: 'mm', format: [larguraMM, primeiraAltura] } })
+          .from(elementos[0]).toPdf().get('pdf');
+        while (pdf.internal.getNumberOfPages() > 1) {
+          pdf.deletePage(pdf.internal.getNumberOfPages());
+        }
 
         // As demais páginas entram manualmente, cada uma com a sua própria altura real
         for (let i = 1; i < canvases.length; i++) {
