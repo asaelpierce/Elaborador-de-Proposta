@@ -2674,15 +2674,44 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     }));
   };
 
+  // Converte toda imagem externa (logo, fotos vindas do Supabase Storage) em
+  // base64 embutido ANTES de capturar. Isso evita um problema sutil: a lib de
+  // captura clona a página numa área invisível pra tirar o "print", e nesse
+  // clone as imagens começam a carregar de novo do zero — se a rede demorar
+  // um pouco, a foto sai em branco no PDF mesmo aparecendo normal na tela.
+  // Com a imagem já embutida como texto, não tem carregamento nenhum pra
+  // esperar, então nunca falta.
+  const embutirImagensExternas = async (container) => {
+    const imgs = Array.from(container.querySelectorAll('img[src^="http"]'));
+    const restaurar = [];
+    await Promise.all(imgs.map(async (img) => {
+      try {
+        const resp = await fetch(img.src, { mode: 'cors', cache: 'no-store' });
+        const blob = await resp.blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        restaurar.push({ img, srcOriginal: img.src });
+        img.src = dataUrl;
+      } catch (e) { /* se falhar, mantém a URL original — não piora nada */ }
+    }));
+    return () => restaurar.forEach(({ img, srcOriginal }) => { img.src = srcOriginal; });
+  };
+
   const handleDownload = async () => {
     if (!window.html2pdf || !selectedProduct) return;
     setIsGenerating(true);
     setTimeout(async () => {
+      let restaurarImagens = null;
       try {
         const container = document.getElementById('ficha-tecnica-pdf-real');
         const elementos = Array.from(container.querySelectorAll('section.page'));
         if (elementos.length === 0) throw new Error('Nada para exportar.');
 
+        restaurarImagens = await embutirImagensExternas(container);
         await Promise.all(elementos.map(esperarImagensFicha));
 
         const larguraMM = orientacaoFicha === 'paisagem' ? 297 : 210;
@@ -2696,22 +2725,23 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
           const canvas = await window.html2pdf().set(optCanvas).from(el).toCanvas().get('canvas');
           canvases.push(canvas);
         }
-
         const alturaMM = (canvas) => (canvas.height / canvas.width) * larguraMM;
-        const primeiraAltura = alturaMM(canvases[0]);
 
-        // A primeira página já nasce do tamanho exato do conteúdo dela
-        const pdf = await window.html2pdf()
-          .set({ jsPDF: { unit: 'mm', format: [larguraMM, primeiraAltura], orientation: primeiraAltura >= larguraMM ? 'portrait' : 'landscape' } })
-          .from(elementos[0]).toPdf().get('pdf');
-        while (pdf.internal.getNumberOfPages() > 1) {
-          pdf.deletePage(pdf.internal.getNumberOfPages());
-        }
+        // Pega a "classe" do gerador de PDF através de uma página descartável —
+        // depois montamos o documento de verdade na mão, só com [largura, altura]
+        // exatos por página, sem passar orientação (misturar as duas coisas é o
+        // que fazia o PDF em paisagem sair espremido numa folha de retrato).
+        const paginaDescartavel = await window.html2pdf().set({ jsPDF: { unit: 'mm', format: 'a4' } }).from(elementos[0]).toPdf().get('pdf');
+        const JsPDFCtor = paginaDescartavel.constructor;
+
+        const primeiraAltura = alturaMM(canvases[0]);
+        const pdf = new JsPDFCtor({ unit: 'mm', format: [larguraMM, primeiraAltura] });
+        pdf.addImage(canvases[0].toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, larguraMM, primeiraAltura);
 
         // As demais páginas entram manualmente, cada uma com a sua própria altura real
         for (let i = 1; i < canvases.length; i++) {
           const altura = alturaMM(canvases[i]);
-          pdf.addPage([larguraMM, altura], altura >= larguraMM ? 'portrait' : 'landscape');
+          pdf.addPage([larguraMM, altura]);
           pdf.addImage(canvases[i].toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, larguraMM, altura);
         }
 
@@ -2720,6 +2750,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
       } catch (e) {
         showToast("Erro ao gerar PDF.");
       } finally {
+        if (restaurarImagens) restaurarImagens();
         setIsGenerating(false);
       }
     }, 100);
