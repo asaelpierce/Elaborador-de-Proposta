@@ -2726,18 +2726,17 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
           canvases.push(canvas);
         }
         const alturaMM = (canvas) => (canvas.height / canvas.width) * larguraMM;
-        const primeiraAltura = alturaMM(canvases[0]);
 
-        // A primeira página já nasce do tamanho exato do conteúdo dela.
-        // Importante: passamos SÓ o formato [largura, altura] customizado,
-        // sem nenhum campo de orientação junto — misturar as duas coisas é
-        // o que fazia o PDF em paisagem sair espremido numa folha de retrato.
-        const pdf = await window.html2pdf()
-          .set({ jsPDF: { unit: 'mm', format: [larguraMM, primeiraAltura] } })
-          .from(elementos[0]).toPdf().get('pdf');
-        while (pdf.internal.getNumberOfPages() > 1) {
-          pdf.deletePage(pdf.internal.getNumberOfPages());
-        }
+        // Cria o documento PDF direto (sem passar pela função ".toPdf()" da
+        // biblioteca, que insiste em criar sempre uma folha em pé por dentro,
+        // não importa o que a gente configure). Assim controlamos o tamanho
+        // exato de cada folha na mão, sem surpresa.
+        const JsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+        if (!JsPDFCtor) throw new Error('Biblioteca jsPDF não encontrada.');
+
+        const primeiraAltura = alturaMM(canvases[0]);
+        const pdf = new JsPDFCtor({ unit: 'mm', format: [larguraMM, primeiraAltura] });
+        pdf.addImage(canvases[0].toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, larguraMM, primeiraAltura);
 
         // As demais páginas entram manualmente, cada uma com a sua própria altura real
         for (let i = 1; i < canvases.length; i++) {
