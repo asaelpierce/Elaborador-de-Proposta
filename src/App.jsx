@@ -2867,6 +2867,54 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
         <div style="background:#F5F6F7;padding:4px 8px"><div style="font-size:7.5pt;letter-spacing:.08em;color:#6B7280;text-transform:uppercase">Unidade</div><div style="font-size:11pt;font-weight:600">${esc(selectedProduct.um || 'UN')}</div></div>
       </div>
 
+      ${(() => {
+        const ehPaisagem = orientacaoFicha === 'paisagem';
+        const blocoAplicacao = `
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11pt;letter-spacing:.07em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:2px;margin-bottom:5px">Aplicação recomendada<span style="color:#8A9099;font-weight:500"> / Application</span></div>
+          <ul style="margin:0;padding-left:14px;font-size:9.3pt;line-height:1.35;display:flex;flex-direction:column;gap:2px">${liItems(aplicacao)}</ul>`;
+        const blocoInstrucoes = `
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11pt;letter-spacing:.07em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:2px;margin-bottom:5px;margin-top:${ehPaisagem ? '9px' : '0'}">Instruções de montagem<span style="color:#8A9099;font-weight:500"> / Mounting</span></div>
+          <ol style="margin:0;padding-left:15px;font-size:9.3pt;line-height:1.35;display:flex;flex-direction:column;gap:2px">${liItems(montagem)}</ol>`;
+        const blocoObservacoes = `
+          <div style="margin-top:9px;border:1px solid #C9CDD3;border-left:3px solid #FFD200;background:#FAFAF6;padding:6px 10px">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:10.5pt;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">Observações<span style="color:#8A9099;font-weight:500"> / Notes</span></div>
+            <ul style="margin:0;padding-left:14px;font-size:8.8pt;line-height:1.3;display:flex;flex-direction:column;gap:1.5px;color:#3A3F46">${liItems(observ)}</ul>
+          </div>`;
+
+        if (ehPaisagem) {
+          // Em paisagem, aproveita a largura extra: 3 colunas lado a lado em vez
+          // de empilhar tudo — isso evita que a página fique mais alta que uma
+          // A4 deitada de verdade (210mm) e "vaze" na hora de imprimir.
+          return `
+      <div style="display:grid;grid-template-columns:60mm 1fr 1fr;gap:7mm;align-items:start">
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="border:1px solid #C9CDD3;background:#FBFBFC;padding:4px">
+            <div style="width:100%;height:52mm;display:flex;align-items:center;justify-content:center;overflow:hidden">${imgProduto}</div>
+          </div>
+          <div style="font-size:7.5pt;color:#6B7280;line-height:1.3">Figura 1 — Vista isométrica do produto.</div>
+          ${camadasHtml}
+        </div>
+
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:2px;margin-bottom:5px">Descrição<span style="color:#8A9099;font-weight:500"> / Description</span></div>
+          <p style="margin:0;font-size:9.5pt;line-height:1.35;text-align:justify">${boldKeywords(selectedProduct.caracteristica || selectedProduct.descricao_original || 'Sem descrição cadastrada.')}</p>
+          ${propriedades.length > 0 ? `
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:2px;margin:9px 0 0">Características<span style="color:#8A9099;font-weight:500"> / Features</span></div>
+          <table style="width:100%;border-collapse:collapse;font-size:9pt;margin-top:3px">
+            <tbody>${featuresRows}</tbody>
+          </table>` : ''}
+        </div>
+
+        <div>
+          ${blocoAplicacao}
+          ${blocoInstrucoes}
+          ${blocoObservacoes}
+        </div>
+      </div>`;
+        }
+
+        // Retrato: layout original, empilhado (funciona bem numa folha mais estreita e alta)
+        return `
       <div style="display:grid;grid-template-columns:70mm 1fr;gap:7mm;align-items:start">
         <div style="display:flex;flex-direction:column;gap:5px">
           <div style="border:1px solid #C9CDD3;background:#FBFBFC;padding:4px">
@@ -2879,7 +2927,6 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
         <div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:2px;margin-bottom:5px">Descrição<span style="color:#8A9099;font-weight:500"> / Description</span></div>
           <p style="margin:0;font-size:10pt;line-height:1.4;text-align:justify">${boldKeywords(selectedProduct.caracteristica || selectedProduct.descricao_original || 'Sem descrição cadastrada.')}</p>
-
           ${propriedades.length > 0 ? `
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:2px;margin:9px 0 0">Características<span style="color:#8A9099;font-weight:500"> / Features</span></div>
           <table style="width:100%;border-collapse:collapse;font-size:9.5pt;margin-top:3px">
@@ -2889,20 +2936,11 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:10px">
-        <div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11pt;letter-spacing:.07em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:2px;margin-bottom:5px">Aplicação recomendada<span style="color:#8A9099;font-weight:500"> / Application</span></div>
-          <ul style="margin:0;padding-left:14px;font-size:9.3pt;line-height:1.35;display:flex;flex-direction:column;gap:2px">${liItems(aplicacao)}</ul>
-        </div>
-        <div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11pt;letter-spacing:.07em;text-transform:uppercase;border-bottom:2px solid #111111;padding-bottom:2px;margin-bottom:5px">Instruções de montagem<span style="color:#8A9099;font-weight:500"> / Mounting</span></div>
-          <ol style="margin:0;padding-left:15px;font-size:9.3pt;line-height:1.35;display:flex;flex-direction:column;gap:2px">${liItems(montagem)}</ol>
-        </div>
+        <div>${blocoAplicacao}</div>
+        <div>${blocoInstrucoes}</div>
       </div>
-
-      <div style="margin-top:9px;border:1px solid #C9CDD3;border-left:3px solid #FFD200;background:#FAFAF6;padding:6px 10px">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:10.5pt;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">Observações<span style="color:#8A9099;font-weight:500"> / Notes</span></div>
-        <ul style="margin:0;padding-left:14px;font-size:8.8pt;line-height:1.3;display:flex;flex-direction:column;gap:1.5px;color:#3A3F46">${liItems(observ)}</ul>
-      </div>
+      ${blocoObservacoes}`;
+      })()}
 
       ${selectedProduct.garantia ? `<div style="font-size:8.8pt;color:#6B7280;margin-top:8px"><strong style="color:#111111">Garantia:</strong> ${esc(selectedProduct.garantia)}</div>` : ''}
 
