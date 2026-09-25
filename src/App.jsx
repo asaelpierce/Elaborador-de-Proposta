@@ -2841,8 +2841,9 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
 
     const temPagina2 = composicao.length > 0;
     const alturaMinPagina = orientacaoFicha === 'paisagem' ? '210mm' : '297mm';
+    const larguraPagina = orientacaoFicha === 'paisagem' ? '297mm' : '210mm';
     const pagina1 = `
-    <section class="page" style="position:relative;padding:11mm 13mm 16mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:${alturaMinPagina}">
+    <section class="page" style="position:relative;width:${larguraPagina};padding:11mm 13mm 16mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:${alturaMinPagina}">
       <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
         <img src="${logoSrc}" alt="Kalenborn Wear Protection Solutions" crossorigin="anonymous" style="height:14mm;width:auto;display:block">
         <div style="text-align:right;line-height:1">
@@ -2912,7 +2913,7 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
     </section>`;
 
     const pagina2 = temPagina2 ? `
-    <section class="page" style="position:relative;padding:12mm 13mm 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:${alturaMinPagina};page-break-before:always">
+    <section class="page" style="position:relative;width:${larguraPagina};padding:12mm 13mm 18mm;font-family:Barlow,'Helvetica Neue',Arial,sans-serif;color:#111111;background:#ffffff;box-sizing:border-box;min-height:${alturaMinPagina};page-break-before:always">
       <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #111111;padding-bottom:6px;margin-bottom:11px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14pt;letter-spacing:.04em">${esc(nomeExibicao)}</div>
         <div style="font-size:8.5pt;color:#6B7280;letter-spacing:.1em;text-transform:uppercase">Ficha Técnica${mostrarCodVale ? ` · Cód. Vale ${esc(selectedProduct.codvale || '—')}` : ''}</div>
