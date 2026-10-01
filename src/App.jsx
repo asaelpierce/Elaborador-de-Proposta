@@ -952,6 +952,7 @@ export default function App() {
     } catch (error) { showToast("Erro ao excluir proposta."); }
   };
 
+  if (new URLSearchParams(window.location.search).has('cadastro')) return <PublicClientRegistration />;
   if (!isAuthenticated) return <LoginScreen onLogin={() => { setIsAuthenticated(true); localStorage.setItem('kbn_auth', 'true'); }} />;
 
   return (
@@ -965,6 +966,7 @@ export default function App() {
           <NavItem icon={Search} label="Catálogo" active={activeTab === 'catalog'} onClick={() => { setActiveTab('catalog'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
           <NavItem icon={PenTool} label="Elaborador" active={activeTab === 'builder'} onClick={() => { setActiveTab('builder'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} badge={currentProposal.items.length > 0 ? currentProposal.items.length : null} collapsed={!isSidebarExpanded} />
           <NavItem icon={PieChart} label="Gestão CRM" active={activeTab === 'management'} onClick={() => { setActiveTab('management'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
+          <NavItem icon={Building} label="Clientes" active={activeTab === 'pendingClients'} onClick={() => { setActiveTab('pendingClients'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
           <NavItem icon={Package} label="Estoque" active={activeTab === 'estoque'} onClick={() => { setActiveTab('estoque'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
           <NavItem icon={ShieldAlert} label="FISP" active={activeTab === 'fisp'} onClick={() => { setActiveTab('fisp'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
           <NavItem icon={Box} label="Bandejas 3D" active={activeTab === 'simulator'} onClick={() => { setActiveTab('simulator'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
@@ -997,6 +999,7 @@ export default function App() {
             {activeTab === 'catalog' && <CatalogView clients={clients} products={products} currentProposal={currentProposal} setCurrentProposal={setCurrentProposal} apiKey={openAIApiKey} showToast={showToast} setActiveTab={setActiveTab} logo={customLogo} />}
             {activeTab === 'builder' && <BuilderView clients={clients} products={products} observations={observations} currentProposal={currentProposal} setCurrentProposal={setCurrentProposal} logo={customLogo} showToast={showToast} saveProposalToDB={saveProposalToDB} isSidebarExpanded={isSidebarExpanded} setActiveTab={setActiveTab} setSelectedTechSheetId={setSelectedTechSheetId} />}
             {activeTab === 'management' && <ManagementView proposals={proposals} clients={clients} updateStatus={async (id, s) => { await supabaseRequest('proposals', 'PATCH', {id, status: s}); refreshData();}} loadProposalForEditing={(p) => {setCurrentProposal(p); setActiveTab('builder');}} deleteProposal={deleteProposal} />}
+            {activeTab === 'pendingClients' && <PendingClientsView showToast={showToast} refreshData={refreshData} clients={clients} />}
             {activeTab === 'estoque' && <EstoqueView products={products} estoque={estoque} showToast={showToast} refreshData={refreshData} />}
             {activeTab === 'fisp' && <FispView fispList={fispList} showToast={showToast} refreshData={refreshData} />}
             {activeTab === 'simulator' && <SimulatorView showToast={showToast} refreshData={refreshData} products={products} />}
@@ -2714,37 +2717,48 @@ function TechnicalSheetView({ products, customLogo, showToast, initialSelectedId
         restaurarImagens = await embutirImagensExternas(container);
         await Promise.all(elementos.map(esperarImagensFicha));
 
-        const larguraMM = orientacaoFicha === 'paisagem' ? 297 : 210;
-        const optCanvas = { html2canvas: { scale: 3, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 } };
+        const ehPaisagem = orientacaoFicha === 'paisagem';
+        const larguraMM = ehPaisagem ? 297 : 210;
+        // IMPORTANTE: a "moldura" invisível que a biblioteca monta pra capturar
+        // usa a largura da folha configurada aqui. Sem isso ela usa A4 em pé
+        // (210mm) e corta tudo que passa disso — era o que cortava o paisagem.
+        const optCanvas = {
+          margin: 0,
+          html2canvas: { scale: 3, dpi: 300, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: ehPaisagem ? 'landscape' : 'portrait' }
+        };
 
-        // Captura cada página como imagem e calcula a altura REAL do conteúdo
-        // (em vez de forçar um tamanho fixo de A4, que espremia ou cortava
-        // quando o conteúdo passava um pouco da altura padrão).
         const canvases = [];
         for (const el of elementos) {
           const canvas = await window.html2pdf().set(optCanvas).from(el).toCanvas().get('canvas');
           canvases.push(canvas);
         }
         const alturaMM = (canvas) => (canvas.height / canvas.width) * larguraMM;
-        const primeiraAltura = alturaMM(canvases[0]);
 
-        // Pega um PDF de verdade (funcional) através de um pedido comum em
-        // pé — sabemos que isso sempre funciona. Depois criamos a PÁGINA
-        // certa (no tamanho exato que queremos, inclusive paisagem) usando
-        // "addPage", que também já sabemos que funciona certinho — e só
-        // descartamos a primeira página errada que a biblioteca criou sozinha.
+        // Desenha uma página. Paisagem: folha A4 deitada de verdade (297x210),
+        // encaixando o conteúdo (reduz levemente se passar da altura).
+        // Retrato: folha na altura real do conteúdo (como já funcionava).
+        const desenharPagina = (pdf, canvas, novaPagina) => {
+          const img = canvas.toDataURL('image/jpeg', 1.0);
+          const alturaConteudo = alturaMM(canvas);
+          if (ehPaisagem) {
+            const pageW = 297, pageH = 210;
+            if (novaPagina) pdf.addPage([pageW, pageH], 'l');
+            const escala = Math.min(1, pageH / alturaConteudo);
+            const w = pageW * escala, h = alturaConteudo * escala;
+            pdf.addImage(img, 'JPEG', (pageW - w) / 2, 0, w, h);
+          } else {
+            if (novaPagina) pdf.addPage([larguraMM, alturaConteudo]);
+            pdf.addImage(img, 'JPEG', 0, 0, larguraMM, alturaConteudo);
+          }
+        };
+
+        // PDF base funcional; criamos as páginas certas com addPage e
+        // descartamos a primeira página de brinde da biblioteca.
         const pdf = await window.html2pdf().set({ jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(elementos[0]).toPdf().get('pdf');
-        pdf.addPage([larguraMM, primeiraAltura]);
-        pdf.setPage(2);
-        pdf.addImage(canvases[0].toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, larguraMM, primeiraAltura);
-        pdf.deletePage(1);
-
-        // As demais páginas entram manualmente, cada uma com a sua própria altura real
-        for (let i = 1; i < canvases.length; i++) {
-          const altura = alturaMM(canvases[i]);
-          pdf.addPage([larguraMM, altura]);
-          pdf.addImage(canvases[i].toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, larguraMM, altura);
-        }
+        const paginasIniciais = pdf.internal.getNumberOfPages();
+        canvases.forEach(cv => desenharPagina(pdf, cv, true));
+        for (let i = 0; i < paginasIniciais; i++) pdf.deletePage(1);
 
         pdf.save(`Ficha_Tecnica_${selectedProduct.codvale || selectedProduct.id}.pdf`);
         showToast("Ficha Técnica baixada!");
@@ -3864,6 +3878,323 @@ Não invente números que não foram informados — nesses casos, escreva uma fr
             <div id="case-study-li-slide-3" style={{ width: '1080px', height: '1080px', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: slides.slide3 }} />
           </>
         ); })()}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// AUTOCADASTRO DE CLIENTES (tela pública, sem login)
+// Acessível em: <url do portal>/?cadastro=1
+// O visitante só consegue ENVIAR — não lê nada do banco (RLS).
+// ==========================================
+const UFS_BR = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+const soDigitos = (s) => String(s || '').replace(/\D/g, '');
+const formatarCNPJ = (s) => { const d = soDigitos(s).slice(0, 14); return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2'); };
+// ICMS sugerido saindo de MG (Kalenborn - Vespasiano/MG) para contribuinte
+const icmsSugerido = (uf) => { if (!uf) return ''; if (uf === 'MG') return '18%'; return ['SP','RJ','PR','SC','RS'].includes(uf) ? '12%' : '7%'; };
+
+
+// Busca dados oficiais do CNPJ (Receita Federal, via BrasilAPI). IE não vem da Receita.
+async function buscarDadosCNPJ(cnpj) {
+  const d = soDigitos(cnpj);
+  if (d.length !== 14) throw new Error('CNPJ precisa ter 14 números.');
+  const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${d}`);
+  if (!r.ok) throw new Error('CNPJ não encontrado na Receita.');
+  const j = await r.json();
+  const endereco = [j.descricao_tipo_de_logradouro, j.logradouro].filter(Boolean).join(' ') + (j.numero ? `, ${j.numero}` : '') + (j.complemento ? ` - ${j.complemento}` : '') + (j.bairro ? ` - ${j.bairro}` : '');
+  return {
+    razao_social: j.razao_social || '', nome_fantasia: j.nome_fantasia || '',
+    endereco, cidade: j.municipio || '', uf: j.uf || '', cep: j.cep || '',
+    telefone: j.ddd_telefone_1 || '', email: j.email || '',
+    situacao: j.descricao_situacao_cadastral || ''
+  };
+}
+
+function PublicClientRegistration() {
+  const vazio = { razao_social: '', nome_fantasia: '', cnpj: '', ie: '', endereco: '', cidade: '', uf: '', cep: '', contato_nome: '', email: '', telefone: '', observacoes: '' };
+  const [f, setF] = useState(vazio);
+  const [buscando, setBuscando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [enviado, setEnviado] = useState(false);
+  const [erro, setErro] = useState('');
+  const set = (k) => (e) => setF(x => ({ ...x, [k]: e.target.value }));
+
+  const buscarCNPJ = async () => {
+    const d = soDigitos(f.cnpj);
+    if (d.length !== 14) { setErro('Digite os 14 números do CNPJ.'); return; }
+    setErro(''); setBuscando(true);
+    try {
+      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${d}`);
+      if (!r.ok) throw new Error();
+      const j = await r.json();
+      setF(x => ({
+        ...x,
+        razao_social: j.razao_social || x.razao_social,
+        nome_fantasia: j.nome_fantasia || x.nome_fantasia,
+        endereco: [j.descricao_tipo_de_logradouro, j.logradouro].filter(Boolean).join(' ') + (j.numero ? `, ${j.numero}` : '') + (j.complemento ? ` - ${j.complemento}` : '') + (j.bairro ? ` - ${j.bairro}` : '') || x.endereco,
+        cidade: j.municipio || x.cidade,
+        uf: j.uf || x.uf,
+        cep: j.cep || x.cep,
+        telefone: x.telefone || j.ddd_telefone_1 || '',
+        email: x.email || j.email || ''
+      }));
+    } catch (e) { setErro('Não encontramos esse CNPJ automaticamente — preencha os dados manualmente.'); }
+    finally { setBuscando(false); }
+  };
+
+  const enviar = async () => {
+    if (!f.razao_social.trim() || soDigitos(f.cnpj).length !== 14 || !f.email.trim()) { setErro('Preencha pelo menos Razão Social, CNPJ e E-mail.'); return; }
+    setErro(''); setEnviando(true);
+    try {
+      const r = await fetch(`${SUPABASE_REST_URL}cadastro_clientes_pendentes`, {
+        method: 'POST',
+        headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ ...f, cnpj: soDigitos(f.cnpj), status: 'pendente' })
+      });
+      if (!r.ok) throw new Error(await r.text());
+      setEnviado(true);
+    } catch (e) { setErro('Não foi possível enviar agora. Tente novamente em instantes.'); }
+    finally { setEnviando(false); }
+  };
+
+  const campo = 'w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none bg-white';
+  const rotulo = 'text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1';
+
+  return (
+    <div className="min-h-screen bg-[#F1F5F9] font-sans text-slate-800 py-8 px-4">
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-[#111111] rounded-t-2xl px-6 py-5 text-white">
+          <div className="text-lg font-black tracking-[0.18em] uppercase">Kalenborn</div>
+          <div className="text-[10px] tracking-[0.2em] uppercase text-[#FFD100] mt-1">Wear Protection · Proteção contra desgaste</div>
+        </div>
+        <div className="h-1.5 bg-[#FFD100]" />
+        <div className="bg-white rounded-b-2xl shadow-xl p-6 sm:p-8">
+          {enviado ? (
+            <div className="text-center py-10">
+              <CheckCircle size={48} className="mx-auto text-emerald-500" />
+              <h2 className="text-xl font-black mt-4">Cadastro enviado!</h2>
+              <p className="text-sm text-slate-500 mt-2">Recebemos seus dados. Nossa equipe comercial vai conferir e entrar em contato em breve.</p>
+            </div>
+          ) : (
+            <>
+              <h1 className="text-xl font-black">Cadastro de Cliente</h1>
+              <p className="text-sm text-slate-500 mt-1 mb-6">Preencha os dados da sua empresa. Digite o CNPJ e clique em <strong>Buscar</strong> para preencher automaticamente.</p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className={rotulo}>CNPJ *</label>
+                  <div className="flex gap-2">
+                    <input className={campo} value={f.cnpj} onChange={e => setF(x => ({ ...x, cnpj: formatarCNPJ(e.target.value) }))} placeholder="00.000.000/0000-00" inputMode="numeric" />
+                    <button type="button" onClick={buscarCNPJ} disabled={buscando} className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 rounded-lg text-sm flex items-center gap-2 cursor-pointer disabled:opacity-60">{buscando ? <RefreshCw size={15} className="animate-spin" /> : <Search size={15} />} Buscar</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2"><label className={rotulo}>Razão Social *</label><input className={campo} value={f.razao_social} onChange={set('razao_social')} /></div>
+                  <div><label className={rotulo}>Nome Fantasia</label><input className={campo} value={f.nome_fantasia} onChange={set('nome_fantasia')} /></div>
+                  <div><label className={rotulo}>Inscrição Estadual</label><input className={campo} value={f.ie} onChange={set('ie')} placeholder="ou ISENTO" /></div>
+                  <div className="sm:col-span-2"><label className={rotulo}>Endereço</label><input className={campo} value={f.endereco} onChange={set('endereco')} placeholder="Rua, número - bairro" /></div>
+                  <div><label className={rotulo}>Cidade</label><input className={campo} value={f.cidade} onChange={set('cidade')} /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className={rotulo}>UF</label><select className={campo} value={f.uf} onChange={set('uf')}><option value="">—</option>{UFS_BR.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
+                    <div><label className={rotulo}>CEP</label><input className={campo} value={f.cep} onChange={set('cep')} inputMode="numeric" /></div>
+                  </div>
+                  <div><label className={rotulo}>Nome do contato</label><input className={campo} value={f.contato_nome} onChange={set('contato_nome')} /></div>
+                  <div><label className={rotulo}>Telefone</label><input className={campo} value={f.telefone} onChange={set('telefone')} inputMode="tel" /></div>
+                  <div className="sm:col-span-2"><label className={rotulo}>E-mail *</label><input className={campo} type="email" value={f.email} onChange={set('email')} /></div>
+                  <div className="sm:col-span-2"><label className={rotulo}>Observações</label><textarea rows="3" className={`${campo} resize-y`} value={f.observacoes} onChange={set('observacoes')} placeholder="Ex: setor de compras, produto de interesse..." /></div>
+                </div>
+                {erro && <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{erro}</div>}
+                <button type="button" onClick={enviar} disabled={enviando} className="w-full bg-[#111111] hover:bg-black text-white font-black py-3.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60">{enviando ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />} Enviar cadastro</button>
+                <p className="text-[11px] text-slate-400 text-center">Seus dados são usados apenas para cadastro comercial na Kalenborn do Brasil.</p>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// CLIENTES — o próprio usuário do portal cadastra/edita clientes
+// (busca automática pelo CNPJ) + autocadastro externo opcional
+// ==========================================
+function PendingClientsView({ showToast, refreshData, clients = [] }) {
+  const vazio = { codigo: '', cnpj: '', razao_social: '', nome_fantasia: '', ie: '', endereco: '', cidade: '', uf: '', cep: '', contato: '', telefone: '', email: '', icms: '' };
+  const [f, setF] = useState(vazio);
+  const [editandoId, setEditandoId] = useState(null);
+  const [buscando, setBuscando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [aviso, setAviso] = useState('');
+  const [busca, setBusca] = useState('');
+  const [pendentes, setPendentes] = useState([]);
+  const [mostrarLink, setMostrarLink] = useState(false);
+  const linkPublico = `${window.location.origin}${window.location.pathname}?cadastro=1`;
+  const set = (k) => (e) => setF(x => ({ ...x, [k]: e.target.value }));
+
+  const carregarPendentes = async () => {
+    try { const rows = await supabaseRequest('cadastro_clientes_pendentes'); setPendentes((rows || []).filter(r => r.status === 'pendente')); } catch (e) {}
+  };
+  useEffect(() => { carregarPendentes(); }, []);
+
+  const buscar = async () => {
+    setAviso(''); setBuscando(true);
+    try {
+      const jaExiste = clients.find(cl => soDigitos(cl.document) === soDigitos(f.cnpj) && cl.id !== editandoId);
+      if (jaExiste) setAviso(`⚠️ Esse CNPJ já está cadastrado como "${jaExiste.company}".`);
+      const d = await buscarDadosCNPJ(f.cnpj);
+      setF(x => ({ ...x, razao_social: d.razao_social, nome_fantasia: d.nome_fantasia, endereco: d.endereco, cidade: d.cidade, uf: d.uf, cep: d.cep,
+        telefone: x.telefone || d.telefone, email: x.email || d.email, icms: x.icms || icmsSugerido(d.uf) }));
+      if (d.situacao && d.situacao.toUpperCase() !== 'ATIVA') setAviso(a => (a ? a + ' ' : '') + `⚠️ Situação na Receita: ${d.situacao}.`);
+      else if (!jaExiste) setAviso('✅ Dados puxados da Receita. Falta só conferir e preencher a Inscrição Estadual.');
+    } catch (e) { setAviso(`${e.message} Preencha manualmente.`); }
+    finally { setBuscando(false); }
+  };
+
+  const limpar = () => { setF(vazio); setEditandoId(null); setAviso(''); };
+
+  const editar = (cl) => {
+    const m = (cl.company || '').match(/^(.*?)\s*\((.*)\)\s*$/);
+    setF({ codigo: cl.id, cnpj: formatarCNPJ(cl.document), razao_social: m ? m[1] : (cl.company || ''), nome_fantasia: m ? m[2] : '',
+      ie: cl.ie || '', endereco: cl.address || '', cidade: '', uf: cl.uf || '', cep: '', contato: cl.contact || '', telefone: cl.phone || '', email: cl.email || '', icms: cl.icms || '' });
+    setEditandoId(cl.id); setAviso(''); window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const salvar = async () => {
+    if (!f.razao_social.trim() || soDigitos(f.cnpj).length < 11) { setAviso('Preencha pelo menos CNPJ e Razão Social.'); return; }
+    if (!editandoId && clients.some(cl => soDigitos(cl.document) === soDigitos(f.cnpj))) { setAviso('⚠️ Esse CNPJ já está cadastrado. Use "Editar" na lista abaixo.'); return; }
+    setSalvando(true);
+    try {
+      const enderecoCompleto = editandoId ? f.endereco : ([f.endereco, f.cidade].filter(Boolean).join(', ') + (f.cep ? ` - CEP: ${f.cep}` : ''));
+      const id = editandoId || (f.codigo.trim() || crypto.randomUUID());
+      await supabaseRequest('clients', 'POST', {
+        id, company: f.nome_fantasia ? `${f.razao_social} (${f.nome_fantasia})` : f.razao_social,
+        document: soDigitos(f.cnpj), ie: f.ie || null, address: enderecoCompleto || null, uf: f.uf || null,
+        icms: f.icms || icmsSugerido(f.uf), contact: f.contato || null, phone: f.telefone || null, email: f.email || null,
+        updated_at: new Date().toISOString()
+      }, true);
+      showToast(editandoId ? '✅ Cliente atualizado!' : `✅ ${f.razao_social} cadastrado!`);
+      limpar(); refreshData?.();
+    } catch (e) { showToast('Erro ao salvar cliente.'); }
+    finally { setSalvando(false); }
+  };
+
+  const aprovarPendente = async (c) => {
+    try {
+      await supabaseRequest('clients', 'POST', {
+        id: crypto.randomUUID(), company: c.nome_fantasia ? `${c.razao_social} (${c.nome_fantasia})` : c.razao_social,
+        document: soDigitos(c.cnpj), ie: c.ie || null, address: [c.endereco, c.cidade].filter(Boolean).join(', ') + (c.cep ? ` - CEP: ${c.cep}` : ''),
+        uf: c.uf || null, icms: icmsSugerido(c.uf), contact: c.contato_nome || null, phone: c.telefone || null, email: c.email || null, updated_at: new Date().toISOString()
+      });
+      await supabaseRequest('cadastro_clientes_pendentes', 'PATCH', { id: c.id, status: 'aprovado' });
+      showToast(`✅ ${c.razao_social} aprovado!`); refreshData?.(); carregarPendentes();
+    } catch (e) { showToast('Erro ao aprovar.'); }
+  };
+  const rejeitarPendente = async (c) => {
+    if (!window.confirm(`Rejeitar ${c.razao_social}?`)) return;
+    try { await supabaseRequest('cadastro_clientes_pendentes', 'PATCH', { id: c.id, status: 'rejeitado' }); carregarPendentes(); } catch (e) {}
+  };
+
+  const lista = useMemo(() => {
+    const t = busca.toLowerCase().trim(); const td = soDigitos(busca);
+    return [...clients].filter(cl => !t || (cl.company || '').toLowerCase().includes(t) || (td && soDigitos(cl.document).includes(td)) || String(cl.id).toLowerCase() === t)
+      .sort((a, b) => (a.company || '').localeCompare(b.company || '')).slice(0, 100);
+  }, [clients, busca]);
+
+  const campo = 'w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none bg-white';
+  const rotulo = 'text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1';
+
+  return (
+    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-8 bg-slate-100">
+      <div className="max-w-4xl mx-auto space-y-6">
+
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="font-black text-lg uppercase flex items-center gap-2"><Building size={20} className="text-blue-600" /> {editandoId ? 'Editar cliente' : 'Cadastrar cliente'}</h2>
+            {editandoId && <button onClick={limpar} className="text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer">Cancelar edição</button>}
+          </div>
+          <p className="text-sm text-slate-500 mb-5">Digite o CNPJ e clique em <strong>Buscar</strong> — os dados vêm da Receita automaticamente.</p>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-2">
+                <label className={rotulo}>CNPJ *</label>
+                <div className="flex gap-2">
+                  <input className={campo} value={f.cnpj} onChange={e => setF(x => ({ ...x, cnpj: formatarCNPJ(e.target.value) }))} onKeyDown={e => e.key === 'Enter' && buscar()} placeholder="00.000.000/0000-00" inputMode="numeric" />
+                  <button type="button" onClick={buscar} disabled={buscando} className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 rounded-lg text-sm flex items-center gap-2 cursor-pointer disabled:opacity-60">{buscando ? <RefreshCw size={15} className="animate-spin" /> : <Search size={15} />} Buscar</button>
+                </div>
+              </div>
+              <div>
+                <label className={rotulo}>Código Sankhya</label>
+                <input className={campo} value={f.codigo} onChange={set('codigo')} disabled={!!editandoId} placeholder="Opcional" />
+              </div>
+            </div>
+            {aviso && <div className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">{aviso}</div>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2"><label className={rotulo}>Razão Social *</label><input className={campo} value={f.razao_social} onChange={set('razao_social')} /></div>
+              <div><label className={rotulo}>Nome Fantasia</label><input className={campo} value={f.nome_fantasia} onChange={set('nome_fantasia')} /></div>
+              <div><label className={rotulo}>Inscrição Estadual</label><input className={campo} value={f.ie} onChange={set('ie')} placeholder="ou ISENTO" /></div>
+              <div className="sm:col-span-2"><label className={rotulo}>Endereço</label><input className={campo} value={f.endereco} onChange={set('endereco')} /></div>
+              {!editandoId && <div><label className={rotulo}>Cidade</label><input className={campo} value={f.cidade} onChange={set('cidade')} /></div>}
+              <div className="grid grid-cols-3 gap-3">
+                <div><label className={rotulo}>UF</label><select className={campo} value={f.uf} onChange={e => setF(x => ({ ...x, uf: e.target.value, icms: icmsSugerido(e.target.value) }))}><option value="">—</option>{UFS_BR.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
+                {!editandoId && <div><label className={rotulo}>CEP</label><input className={campo} value={f.cep} onChange={set('cep')} /></div>}
+                <div><label className={rotulo}>ICMS</label><input className={campo} value={f.icms} onChange={set('icms')} placeholder="18%" /></div>
+              </div>
+              <div><label className={rotulo}>Contato</label><input className={campo} value={f.contato} onChange={set('contato')} placeholder="Nome / setor" /></div>
+              <div><label className={rotulo}>Telefone</label><input className={campo} value={f.telefone} onChange={set('telefone')} /></div>
+              <div className="sm:col-span-2"><label className={rotulo}>E-mail</label><input className={campo} type="email" value={f.email} onChange={set('email')} /></div>
+            </div>
+            <p className="text-[11px] text-slate-400">ICMS sugerido automaticamente pela UF (saída de MG). Confirme com o fiscal em casos especiais.</p>
+            <button type="button" onClick={salvar} disabled={salvando} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60">{salvando ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />} {editandoId ? 'Salvar alterações' : 'Cadastrar cliente'}</button>
+          </div>
+        </div>
+
+        {pendentes.length > 0 && (
+          <div className="bg-amber-50 rounded-2xl border border-amber-200 p-5 space-y-3">
+            <h3 className="font-black text-sm uppercase text-amber-800">Enviados pelo próprio cliente — aguardando aprovação ({pendentes.length})</h3>
+            {pendentes.map(c => (
+              <div key={c.id} className="bg-white rounded-xl border border-amber-100 p-4 flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[200px]">
+                  <div className="font-bold text-sm">{c.razao_social}</div>
+                  <div className="text-[11px] text-slate-500">{formatarCNPJ(c.cnpj)} · {[c.cidade, c.uf].filter(Boolean).join('/')} · {c.email}</div>
+                </div>
+                <button onClick={() => rejeitarPendente(c)} className="px-3 py-1.5 rounded-lg border border-rose-200 text-rose-600 font-bold text-xs cursor-pointer">Rejeitar</button>
+                <button onClick={() => aprovarPendente(c)} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold text-xs cursor-pointer">Aprovar</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h3 className="font-black text-sm uppercase text-slate-600">Clientes cadastrados ({clients.length})</h3>
+            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, CNPJ ou código..." className="w-full sm:w-72 px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-blue-500" />
+          </div>
+          <div className="divide-y divide-slate-100">
+            {lista.map(cl => (
+              <div key={cl.id} className="py-3 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm truncate">{cl.company}</div>
+                  <div className="text-[11px] text-slate-400">{formatarCNPJ(cl.document)} {cl.uf ? `· ${cl.uf}` : ''} {cl.icms ? `· ICMS ${cl.icms}` : ''} {/^\d+$/.test(String(cl.id)) ? `· Cód. ${cl.id}` : ''}</div>
+                </div>
+                <button onClick={() => editar(cl)} className="w-8 h-8 shrink-0 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white flex items-center justify-center cursor-pointer" title="Editar"><Edit size={14} /></button>
+              </div>
+            ))}
+            {lista.length === 0 && <div className="py-6 text-center text-sm text-slate-400">Nenhum cliente encontrado.</div>}
+          </div>
+        </div>
+
+        <div className="text-center">
+          <button onClick={() => setMostrarLink(v => !v)} className="text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer">{mostrarLink ? 'Ocultar' : 'Quer que o próprio cliente preencha?'} Link de autocadastro</button>
+          {mostrarLink && (
+            <div className="mt-3 flex flex-col sm:flex-row gap-2 bg-white rounded-xl border border-slate-200 p-3">
+              <input readOnly value={linkPublico} onFocus={e => e.target.select()} className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-mono bg-slate-50" />
+              <button onClick={async () => { try { await navigator.clipboard.writeText(linkPublico); showToast('✅ Link copiado!'); } catch (e) { showToast(linkPublico); } }} className="bg-blue-600 text-white font-bold px-4 py-2 rounded-lg text-xs cursor-pointer">Copiar link</button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
