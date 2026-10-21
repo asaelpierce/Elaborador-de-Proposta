@@ -4207,112 +4207,311 @@ function PendingClientsView({ showToast, refreshData, clients = [] }) {
 // Recebimento: Edge Function "receber-projeto-estoque" (POST com x-api-key)
 // Os campos são exibidos dinamicamente a partir do JSON recebido.
 // ==========================================
+// ── PROJETO ESTOQUE ─────────────────────────────────────────────────────────
+// Catálogo das peças prontas e em produção na fábrica, para o vendedor
+// consultar e RESERVAR na hora.
+//
+// Era uma tabela genérica de JSON, que mostrava "quantidade_disponivel" como
+// texto cru. Agora que o formato é conhecido, vale apresentar como catálogo —
+// o vendedor precisa reconhecer a peça, não ler um campo.
+//
+// A reserva vai pela função estoque-industrializacao, que guarda a chave no
+// servidor. O saldo conferido é o da base viva da fábrica, não a cópia local:
+// a cópia serve para listar rápido, mas quem decide se dá para vender é
+// sempre a origem — senão dois vendedores fechariam a mesma peça.
 function ProjetoEstoqueView({ showToast }) {
   const [registros, setRegistros] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState('');
+  const [filtro, setFiltro] = useState('PRONTO');
   const [selecionado, setSelecionado] = useState(null);
-  const [mostrarIntegracao, setMostrarIntegracao] = useState(false);
-  const endpoint = SUPABASE_REST_URL.replace('/rest/v1/', '/functions/v1/receber-projeto-estoque');
+  const [reservando, setReservando] = useState(null);
+  const [form, setForm] = useState({ quantidade: '', cliente: '', vendedor: '', dias: 3 });
+  const [bloqueio, setBloqueio] = useState(null);
+  const [enviando, setEnviando] = useState(false);
+  const PONTE = SUPABASE_REST_URL.replace('/rest/v1/', '/functions/v1/estoque-industrializacao');
+
+  const chamarEstoque = async (corpo) => {
+    const r = await fetch(PONTE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+      body: JSON.stringify(corpo),
+    });
+    return r.json();
+  };
 
   const carregar = async () => {
     setCarregando(true);
     try {
       const rows = await supabaseRequest('projeto_estoque');
-      setRegistros((rows || []).sort((a, b) => new Date(b.atualizado_em || b.recebido_em) - new Date(a.atualizado_em || a.recebido_em)));
-    } catch (e) { showToast('Erro ao carregar Projeto Estoque.'); }
+      setRegistros((rows || [])
+        .map(r => ({ ...r, d: r.dados || {} }))
+        .sort((a, b) => (b.d.quantidade_disponivel || 0) - (a.d.quantidade_disponivel || 0)));
+    } catch (e) { showToast('Erro ao carregar o estoque.'); }
     finally { setCarregando(false); }
   };
   useEffect(() => { carregar(); }, []);
 
-  // Colunas = união das chaves recebidas (até 8 na tabela; o resto aparece no detalhe)
-  const colunas = useMemo(() => {
-    const cont = {};
-    registros.forEach(r => Object.keys(r.dados || {}).forEach(k => { cont[k] = (cont[k] || 0) + 1; }));
-    return Object.keys(cont).sort((a, b) => cont[b] - cont[a]).slice(0, 8);
-  }, [registros]);
-
   const filtrados = useMemo(() => {
     const t = busca.toLowerCase().trim();
-    if (!t) return registros;
-    return registros.filter(r => (r.referencia || '').toLowerCase().includes(t) || JSON.stringify(r.dados || {}).toLowerCase().includes(t));
-  }, [registros, busca]);
+    return registros.filter(r => {
+      const d = r.d;
+      if (filtro === 'PRONTO' && !(d.pronto_para_venda && (d.quantidade_disponivel || 0) > 0)) return false;
+      if (filtro === 'PRODUCAO' && !d.em_producao) return false;
+      if (filtro === 'VENDIDO' && !d.vendido) return false;
+      if (!t) return true;
+      return [d.codigo, d.descricao, d.dimensao, d.op, d.familia]
+        .some(x => String(x || '').toLowerCase().includes(t));
+    });
+  }, [registros, busca, filtro]);
 
-  const fmt = (v) => v === null || v === undefined ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+  const totais = useMemo(() => {
+    const prontos = registros.filter(r => r.d.pronto_para_venda && (r.d.quantidade_disponivel || 0) > 0);
+    const prod = registros.filter(r => r.d.em_producao);
+    return {
+      prontos: prontos.length,
+      pecas: prontos.reduce((a, r) => a + Number(r.d.quantidade_disponivel || 0), 0),
+      emProducao: prod.length,
+      pecasProducao: prod.reduce((a, r) => a + Number(r.d.quantidade_total || 0), 0),
+    };
+  }, [registros]);
+
   const ultimo = registros[0] ? new Date(registros[0].atualizado_em || registros[0].recebido_em).toLocaleString('pt-BR') : null;
+  const dataBR = (v) => { const s = String(v || '').slice(0, 10); return s ? s.split('-').reverse().join('/') : '—'; };
+
+  // Bloqueia o saldo por 5 min antes de pedir os dados do cliente: é o que
+  // impede outro vendedor de usar o mesmo número enquanto este preenche.
+  const abrirReserva = async (r) => {
+    setForm({ quantidade: '', cliente: '', vendedor: '', dias: 3 });
+    setBloqueio(null);
+    setReservando(r);
+  };
+
+  const bloquear = async () => {
+    const q = Number(form.quantidade);
+    if (!q || q <= 0) return showToast('Informe a quantidade.');
+    setEnviando(true);
+    try {
+      const res = await chamarEstoque({ acao: 'bloquear', lote_id: reservando.d.lote_id, quantidade: q, vendedor: form.vendedor || 'Comercial' });
+      if (!res.ok) return showToast(res.erro || 'Não foi possível bloquear.');
+      setBloqueio({ id: res.bloqueio_id, expira: res.expira_em });
+      showToast('Quantidade bloqueada por 5 minutos.');
+    } finally { setEnviando(false); }
+  };
+
+  const confirmar = async () => {
+    if (!form.cliente.trim()) return showToast('Informe o cliente.');
+    if (!form.vendedor.trim()) return showToast('Informe o vendedor.');
+    setEnviando(true);
+    try {
+      const res = await chamarEstoque({
+        acao: 'reservar', bloqueio_id: bloqueio?.id, lote_id: reservando.d.lote_id,
+        quantidade: Number(form.quantidade), cliente: form.cliente.trim(),
+        vendedor: form.vendedor.trim(), dias_validade: Number(form.dias) || 3,
+      });
+      if (!res.ok) return showToast(res.erro || 'Não foi possível reservar.');
+      showToast(`Reserva ${res.reserva} criada.`);
+      setReservando(null); setBloqueio(null);
+      carregar();
+    } finally { setEnviando(false); }
+  };
+
+  const cancelarBloqueio = async () => {
+    if (bloqueio) await chamarEstoque({ acao: 'cancelar', reserva_id: bloqueio.id, motivo: 'Reserva não concluída' });
+    setBloqueio(null); setReservando(null); carregar();
+  };
 
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-8 bg-slate-100">
       <div className="max-w-6xl mx-auto space-y-5">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="font-black text-lg uppercase flex items-center gap-2"><Archive size={20} className="text-blue-600" /> Projeto Estoque</h2>
-            <p className="text-sm text-slate-500 mt-0.5">{registros.length} registro(s) recebido(s){ultimo ? ` · última atualização ${ultimo}` : ''}</p>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-black text-lg uppercase flex items-center gap-2"><Archive size={20} className="text-blue-600" /> Estoque da Fábrica</h2>
+              <p className="text-sm text-slate-500 mt-0.5">Peças prontas para venda imediata{ultimo ? ` · atualizado ${ultimo}` : ''}</p>
+            </div>
+            <div className="flex gap-2">
+              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Código, descrição, dimensão..." className="w-48 sm:w-72 px-3 py-2.5 rounded-lg border border-slate-200 text-sm outline-none focus:border-blue-500" />
+              <button onClick={carregar} className="px-3 py-2 rounded-lg bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5 cursor-pointer"><RefreshCw size={14} className={carregando ? 'animate-spin' : ''} /> Atualizar</button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar..." className="w-48 sm:w-64 px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-blue-500" />
-            <button onClick={carregar} className="px-3 py-2 rounded-lg bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5 cursor-pointer"><RefreshCw size={14} className={carregando ? 'animate-spin' : ''} /> Atualizar</button>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+            {[
+              { l: 'Lotes prontos', v: totais.prontos, cor: 'text-emerald-600' },
+              { l: 'Peças disponíveis', v: totais.pecas, cor: 'text-emerald-600', forte: true },
+              { l: 'Lotes em produção', v: totais.emProducao, cor: 'text-sky-600' },
+              { l: 'Peças a caminho', v: totais.pecasProducao, cor: 'text-sky-600' },
+            ].map(c => (
+              <div key={c.l} className={`rounded-xl p-3 ${c.forte ? 'bg-emerald-50 border-2 border-emerald-200' : 'bg-slate-50'}`}>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{c.l}</p>
+                <p className={`text-2xl font-black ${c.cor}`}>{c.v}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mt-4 w-fit">
+            {[{ id: 'PRONTO', l: 'Pronto para venda' }, { id: 'PRODUCAO', l: 'Em produção' },
+              { id: 'VENDIDO', l: 'Já vendido' }, { id: '', l: 'Tudo' }].map(f => (
+              <button key={f.id} onClick={() => setFiltro(f.id)}
+                className={`text-xs font-bold px-3.5 py-2 rounded-lg cursor-pointer ${filtro === f.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
+                {f.l}
+              </button>
+            ))}
           </div>
         </div>
 
         {carregando ? (
           <div className="text-center py-16 text-slate-400 text-sm">Carregando...</div>
-        ) : registros.length === 0 ? (
+        ) : filtrados.length === 0 ? (
           <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-10 text-center">
             <Archive size={32} className="mx-auto text-slate-300" />
-            <div className="font-bold text-slate-600 mt-3">Aguardando dados do portal externo</div>
-            <p className="text-sm text-slate-400 mt-1">Assim que o outro portal enviar as informações, elas aparecem aqui automaticamente.</p>
+            <div className="font-bold text-slate-600 mt-3">{registros.length === 0 ? 'Aguardando dados da fábrica' : 'Nenhuma peça com esse filtro'}</div>
+            <p className="text-sm text-slate-400 mt-1">{registros.length === 0 ? 'Assim que a produção informar os saldos, aparecem aqui.' : 'Tente outro filtro ou limpe a busca.'}</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-500">
-                <tr>
-                  <th className="text-left px-4 py-3 font-black">Referência</th>
-                  {colunas.map(c => <th key={c} className="text-left px-4 py-3 font-black whitespace-nowrap">{c.replace(/_/g, ' ')}</th>)}
-                  <th className="text-left px-4 py-3 font-black">Recebido</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtrados.map(r => (
-                  <tr key={r.id} onClick={() => setSelecionado(r)} className="hover:bg-blue-50/50 cursor-pointer">
-                    <td className="px-4 py-3 font-bold whitespace-nowrap">{r.referencia || '—'}</td>
-                    {colunas.map(c => <td key={c} className="px-4 py-3 max-w-[220px] truncate">{fmt(r.dados?.[c])}</td>)}
-                    <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{new Date(r.atualizado_em || r.recebido_em).toLocaleString('pt-BR')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {filtrados.map(r => {
+              const d = r.d;
+              const pronto = d.pronto_para_venda && (d.quantidade_disponivel || 0) > 0;
+              return (
+                <div key={r.id} className={`bg-white rounded-2xl border-2 p-4 ${d.vendido ? 'border-slate-200 opacity-70' : d.em_producao ? 'border-sky-200' : 'border-emerald-200'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-lg font-black text-slate-900">{d.codigo || '—'}</span>
+                        {d.dimensao && <span className="text-sm font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg">{d.dimensao}</span>}
+                        {d.com_aba != null && <span className="text-[11px] text-slate-400">{d.com_aba ? 'com aba' : 'sem aba'}</span>}
+                      </div>
+                      <p className="text-sm text-slate-600 mt-1 line-clamp-2">{d.descricao}</p>
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[11px] text-slate-400">
+                        {d.op && <span>OP {d.op}</span>}
+                        {d.local && <span>{d.local}</span>}
+                        {d.familia && <span>{d.familia}</span>}
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      {d.vendido ? (
+                        <span className="text-[11px] font-black px-2 py-1 rounded-lg bg-slate-200 text-slate-600">VENDIDO</span>
+                      ) : d.em_producao ? (
+                        <>
+                          <span className="text-[11px] font-black px-2 py-1 rounded-lg bg-sky-500 text-white">EM PRODUÇÃO</span>
+                          <p className="text-xs font-bold text-sky-700 mt-1.5">fica pronto {dataBR(d.previsao_entrega)}</p>
+                          {d.previsao_reprogramada && <p className="text-[10px] text-amber-600 font-bold">data reprogramada</p>}
+                          <p className="text-lg font-black text-slate-700 mt-1">{d.quantidade_total} pç</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-[10px] font-black text-slate-400 uppercase">Disponível</p>
+                          <p className="text-3xl font-black text-emerald-600">{d.quantidade_disponivel}</p>
+                          <p className="text-[11px] text-slate-400">de {d.quantidade_total} {d.unidade || 'PC'}</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
+                    {pronto && (
+                      <button onClick={() => abrirReserva(r)} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold cursor-pointer">Reservar</button>
+                    )}
+                    <button onClick={() => setSelecionado(r)} className="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold cursor-pointer">Detalhes</button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
-
-        <div className="text-center">
-          <button onClick={() => setMostrarIntegracao(v => !v)} className="text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer">{mostrarIntegracao ? 'Ocultar' : 'Ver'} dados de integração (para o portal externo)</button>
-          {mostrarIntegracao && (
-            <div className="mt-3 bg-white rounded-xl border border-slate-200 p-4 text-left text-xs space-y-2">
-              <div><strong>Endereço (POST):</strong> <code className="bg-slate-50 px-1.5 py-0.5 rounded break-all">{endpoint}</code></div>
-              <div><strong>Cabeçalho:</strong> <code className="bg-slate-50 px-1.5 py-0.5 rounded">x-api-key: (chave fornecida pelo administrador)</code></div>
-              <div><strong>Corpo:</strong> um objeto JSON ou uma lista. Use o campo <code className="bg-slate-50 px-1">referencia</code> para atualizar o mesmo item em vez de duplicar.</div>
-            </div>
-          )}
-        </div>
       </div>
+
+      {/* Reserva em dois passos: bloqueia, depois confirma */}
+      {reservando && (
+        <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm" onClick={cancelarBloqueio}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="bg-slate-800 p-4 text-white flex justify-between items-center">
+              <div>
+                <h3 className="font-black">Reservar peças</h3>
+                <p className="text-xs text-slate-300">{reservando.d.codigo} · {reservando.d.dimensao}</p>
+              </div>
+              <button onClick={cancelarBloqueio} className="text-slate-300 hover:text-white cursor-pointer"><X size={20} /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="bg-emerald-50 rounded-xl p-3 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 uppercase">Disponível</span>
+                <span className="text-2xl font-black text-emerald-600">{reservando.d.quantidade_disponivel}</span>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Quantidade</label>
+                <div className="flex gap-2 mt-1">
+                  <input type="number" min="1" disabled={!!bloqueio} value={form.quantidade}
+                    onChange={e => setForm({ ...form, quantidade: e.target.value })}
+                    className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-blue-500 disabled:bg-slate-50" />
+                  {!bloqueio && (
+                    <button onClick={bloquear} disabled={enviando}
+                      className="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-bold cursor-pointer disabled:opacity-60">Bloquear</button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {bloqueio
+                    ? `Bloqueado até ${new Date(bloqueio.expira).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — complete os dados abaixo.`
+                    : 'Bloqueie a quantidade primeiro: ela sai do disponível enquanto você preenche.'}
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Cliente</label>
+                <input value={form.cliente} onChange={e => setForm({ ...form, cliente: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Vendedor</label>
+                <input value={form.vendedor} onChange={e => setForm({ ...form, vendedor: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Validade</label>
+                <select value={form.dias} onChange={e => setForm({ ...form, dias: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-blue-500">
+                  {[1, 2, 3, 5, 7, 15, 30].map(d => <option key={d} value={d}>{d} dia(s)</option>)}
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1">Passado o prazo, o saldo volta ao disponível.</p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button onClick={cancelarBloqueio} className="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 text-sm font-bold cursor-pointer">Cancelar</button>
+                <button onClick={confirmar} disabled={!bloqueio || enviando}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold cursor-pointer disabled:opacity-50">Confirmar reserva</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selecionado && (
         <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSelecionado(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-slate-800 p-4 text-white flex justify-between items-center">
-              <h3 className="font-black">{selecionado.referencia || 'Registro'}</h3>
+              <h3 className="font-black">{selecionado.d.codigo} · {selecionado.d.dimensao}</h3>
               <button onClick={() => setSelecionado(null)} className="text-slate-300 hover:text-white cursor-pointer"><X size={20} /></button>
             </div>
-            <div className="p-5 overflow-y-auto custom-scrollbar divide-y divide-slate-100 text-sm">
-              {Object.entries(selecionado.dados || {}).map(([k, v]) => (
-                <div key={k} className="py-2 grid grid-cols-5 gap-3">
-                  <div className="col-span-2 text-slate-500 text-xs uppercase tracking-wide">{k.replace(/_/g, ' ')}</div>
-                  <div className="col-span-3 font-medium break-words">{fmt(v)}</div>
-                </div>
-              ))}
-              <div className="pt-3 text-[11px] text-slate-400">Origem: {selecionado.origem} · Recebido em {new Date(selecionado.recebido_em).toLocaleString('pt-BR')}</div>
+            <div className="p-5 overflow-y-auto custom-scrollbar text-sm space-y-2">
+              <p className="text-slate-700">{selecionado.d.descricao}</p>
+              <div className="divide-y divide-slate-100">
+                {[['Dimensão', selecionado.d.dimensao], ['Com aba', selecionado.d.com_aba == null ? '—' : (selecionado.d.com_aba ? 'Sim' : 'Não')],
+                  ['Linha', selecionado.d.familia], ['OP', selecionado.d.op], ['Projeto', selecionado.d.br],
+                  ['Local', selecionado.d.local], ['Total', selecionado.d.quantidade_total],
+                  ['Reservado', selecionado.d.quantidade_reservada], ['Disponível', selecionado.d.quantidade_disponivel],
+                  ['Previsão', selecionado.d.previsao_entrega ? dataBR(selecionado.d.previsao_entrega) : null],
+                  ['Motivo da reprogramação', selecionado.d.motivo_reprogramacao]]
+                  .filter(([, v]) => v !== null && v !== undefined && v !== '')
+                  .map(([k, v]) => (
+                    <div key={k} className="py-2 grid grid-cols-5 gap-3">
+                      <div className="col-span-2 text-slate-500 text-xs uppercase tracking-wide">{k}</div>
+                      <div className="col-span-3 font-medium break-words">{String(v)}</div>
+                    </div>
+                  ))}
+              </div>
+              <p className="text-[11px] text-slate-400 pt-2">Vem do Portal de Industrialização · atualizado {new Date(selecionado.atualizado_em || selecionado.recebido_em).toLocaleString('pt-BR')}</p>
             </div>
           </div>
         </div>
