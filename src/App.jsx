@@ -966,6 +966,7 @@ export default function App() {
           <NavItem icon={Search} label="Catálogo" active={activeTab === 'catalog'} onClick={() => { setActiveTab('catalog'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
           <NavItem icon={PenTool} label="Elaborador" active={activeTab === 'builder'} onClick={() => { setActiveTab('builder'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} badge={currentProposal.items.length > 0 ? currentProposal.items.length : null} collapsed={!isSidebarExpanded} />
           <NavItem icon={PieChart} label="Gestão CRM" active={activeTab === 'management'} onClick={() => { setActiveTab('management'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
+          <NavItem icon={Archive} label="Projeto Estoque" active={activeTab === 'projetoEstoque'} onClick={() => { setActiveTab('projetoEstoque'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
           <NavItem icon={Building} label="Clientes" active={activeTab === 'pendingClients'} onClick={() => { setActiveTab('pendingClients'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
           <NavItem icon={Package} label="Estoque" active={activeTab === 'estoque'} onClick={() => { setActiveTab('estoque'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
           <NavItem icon={ShieldAlert} label="FISP" active={activeTab === 'fisp'} onClick={() => { setActiveTab('fisp'); if(window.innerWidth < 1024) setIsSidebarExpanded(false); }} collapsed={!isSidebarExpanded} />
@@ -999,6 +1000,7 @@ export default function App() {
             {activeTab === 'catalog' && <CatalogView clients={clients} products={products} currentProposal={currentProposal} setCurrentProposal={setCurrentProposal} apiKey={openAIApiKey} showToast={showToast} setActiveTab={setActiveTab} logo={customLogo} />}
             {activeTab === 'builder' && <BuilderView clients={clients} products={products} observations={observations} currentProposal={currentProposal} setCurrentProposal={setCurrentProposal} logo={customLogo} showToast={showToast} saveProposalToDB={saveProposalToDB} isSidebarExpanded={isSidebarExpanded} setActiveTab={setActiveTab} setSelectedTechSheetId={setSelectedTechSheetId} />}
             {activeTab === 'management' && <ManagementView proposals={proposals} clients={clients} updateStatus={async (id, s) => { await supabaseRequest('proposals', 'PATCH', {id, status: s}); refreshData();}} loadProposalForEditing={(p) => {setCurrentProposal(p); setActiveTab('builder');}} deleteProposal={deleteProposal} />}
+            {activeTab === 'projetoEstoque' && <ProjetoEstoqueView showToast={showToast} />}
             {activeTab === 'pendingClients' && <PendingClientsView showToast={showToast} refreshData={refreshData} clients={clients} />}
             {activeTab === 'estoque' && <EstoqueView products={products} estoque={estoque} showToast={showToast} refreshData={refreshData} />}
             {activeTab === 'fisp' && <FispView fispList={fispList} showToast={showToast} refreshData={refreshData} />}
@@ -4196,6 +4198,125 @@ function PendingClientsView({ showToast, refreshData, clients = [] }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ==========================================
+// PROJETO ESTOQUE — dados recebidos de outro portal
+// Recebimento: Edge Function "receber-projeto-estoque" (POST com x-api-key)
+// Os campos são exibidos dinamicamente a partir do JSON recebido.
+// ==========================================
+function ProjetoEstoqueView({ showToast }) {
+  const [registros, setRegistros] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [busca, setBusca] = useState('');
+  const [selecionado, setSelecionado] = useState(null);
+  const [mostrarIntegracao, setMostrarIntegracao] = useState(false);
+  const endpoint = SUPABASE_REST_URL.replace('/rest/v1/', '/functions/v1/receber-projeto-estoque');
+
+  const carregar = async () => {
+    setCarregando(true);
+    try {
+      const rows = await supabaseRequest('projeto_estoque');
+      setRegistros((rows || []).sort((a, b) => new Date(b.atualizado_em || b.recebido_em) - new Date(a.atualizado_em || a.recebido_em)));
+    } catch (e) { showToast('Erro ao carregar Projeto Estoque.'); }
+    finally { setCarregando(false); }
+  };
+  useEffect(() => { carregar(); }, []);
+
+  // Colunas = união das chaves recebidas (até 8 na tabela; o resto aparece no detalhe)
+  const colunas = useMemo(() => {
+    const cont = {};
+    registros.forEach(r => Object.keys(r.dados || {}).forEach(k => { cont[k] = (cont[k] || 0) + 1; }));
+    return Object.keys(cont).sort((a, b) => cont[b] - cont[a]).slice(0, 8);
+  }, [registros]);
+
+  const filtrados = useMemo(() => {
+    const t = busca.toLowerCase().trim();
+    if (!t) return registros;
+    return registros.filter(r => (r.referencia || '').toLowerCase().includes(t) || JSON.stringify(r.dados || {}).toLowerCase().includes(t));
+  }, [registros, busca]);
+
+  const fmt = (v) => v === null || v === undefined ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+  const ultimo = registros[0] ? new Date(registros[0].atualizado_em || registros[0].recebido_em).toLocaleString('pt-BR') : null;
+
+  return (
+    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-8 bg-slate-100">
+      <div className="max-w-6xl mx-auto space-y-5">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-black text-lg uppercase flex items-center gap-2"><Archive size={20} className="text-blue-600" /> Projeto Estoque</h2>
+            <p className="text-sm text-slate-500 mt-0.5">{registros.length} registro(s) recebido(s){ultimo ? ` · última atualização ${ultimo}` : ''}</p>
+          </div>
+          <div className="flex gap-2">
+            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar..." className="w-48 sm:w-64 px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-blue-500" />
+            <button onClick={carregar} className="px-3 py-2 rounded-lg bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5 cursor-pointer"><RefreshCw size={14} className={carregando ? 'animate-spin' : ''} /> Atualizar</button>
+          </div>
+        </div>
+
+        {carregando ? (
+          <div className="text-center py-16 text-slate-400 text-sm">Carregando...</div>
+        ) : registros.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-10 text-center">
+            <Archive size={32} className="mx-auto text-slate-300" />
+            <div className="font-bold text-slate-600 mt-3">Aguardando dados do portal externo</div>
+            <p className="text-sm text-slate-400 mt-1">Assim que o outro portal enviar as informações, elas aparecem aqui automaticamente.</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-500">
+                <tr>
+                  <th className="text-left px-4 py-3 font-black">Referência</th>
+                  {colunas.map(c => <th key={c} className="text-left px-4 py-3 font-black whitespace-nowrap">{c.replace(/_/g, ' ')}</th>)}
+                  <th className="text-left px-4 py-3 font-black">Recebido</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtrados.map(r => (
+                  <tr key={r.id} onClick={() => setSelecionado(r)} className="hover:bg-blue-50/50 cursor-pointer">
+                    <td className="px-4 py-3 font-bold whitespace-nowrap">{r.referencia || '—'}</td>
+                    {colunas.map(c => <td key={c} className="px-4 py-3 max-w-[220px] truncate">{fmt(r.dados?.[c])}</td>)}
+                    <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{new Date(r.atualizado_em || r.recebido_em).toLocaleString('pt-BR')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="text-center">
+          <button onClick={() => setMostrarIntegracao(v => !v)} className="text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer">{mostrarIntegracao ? 'Ocultar' : 'Ver'} dados de integração (para o portal externo)</button>
+          {mostrarIntegracao && (
+            <div className="mt-3 bg-white rounded-xl border border-slate-200 p-4 text-left text-xs space-y-2">
+              <div><strong>Endereço (POST):</strong> <code className="bg-slate-50 px-1.5 py-0.5 rounded break-all">{endpoint}</code></div>
+              <div><strong>Cabeçalho:</strong> <code className="bg-slate-50 px-1.5 py-0.5 rounded">x-api-key: (chave fornecida pelo administrador)</code></div>
+              <div><strong>Corpo:</strong> um objeto JSON ou uma lista. Use o campo <code className="bg-slate-50 px-1">referencia</code> para atualizar o mesmo item em vez de duplicar.</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {selecionado && (
+        <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSelecionado(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-slate-800 p-4 text-white flex justify-between items-center">
+              <h3 className="font-black">{selecionado.referencia || 'Registro'}</h3>
+              <button onClick={() => setSelecionado(null)} className="text-slate-300 hover:text-white cursor-pointer"><X size={20} /></button>
+            </div>
+            <div className="p-5 overflow-y-auto custom-scrollbar divide-y divide-slate-100 text-sm">
+              {Object.entries(selecionado.dados || {}).map(([k, v]) => (
+                <div key={k} className="py-2 grid grid-cols-5 gap-3">
+                  <div className="col-span-2 text-slate-500 text-xs uppercase tracking-wide">{k.replace(/_/g, ' ')}</div>
+                  <div className="col-span-3 font-medium break-words">{fmt(v)}</div>
+                </div>
+              ))}
+              <div className="pt-3 text-[11px] text-slate-400">Origem: {selecionado.origem} · Recebido em {new Date(selecionado.recebido_em).toLocaleString('pt-BR')}</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
