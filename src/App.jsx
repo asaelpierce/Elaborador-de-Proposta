@@ -4228,6 +4228,9 @@ function ProjetoEstoqueView({ showToast }) {
   const [reservando, setReservando] = useState(null);
   const [form, setForm] = useState({ quantidade: '', cliente: '', vendedor: '', dias: 3 });
   const [bloqueio, setBloqueio] = useState(null);
+  const [fotos, setFotos] = useState({});
+  const [aoVivo, setAoVivo] = useState(true);
+  const [ampliada, setAmpliada] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const PONTE = SUPABASE_REST_URL.replace('/rest/v1/', '/functions/v1/estoque-industrializacao');
 
@@ -4243,9 +4246,39 @@ function ProjetoEstoqueView({ showToast }) {
   const carregar = async () => {
     setCarregando(true);
     try {
+      // A lista vem da cópia local (rápida); o saldo e as fotos vêm da base
+      // viva da fábrica. Se a consulta ao vivo falhar, a tela ainda abre com
+      // a cópia — melhor um número de minutos atrás do que tela vazia.
       const rows = await supabaseRequest('projeto_estoque');
+      let vivo = {};
+      let fotosMap = {};
+      try {
+        const res = await chamarEstoque({ acao: 'consultar', incluir_producao: true, com_fotos: true, somente_com_saldo: false });
+        if (res?.ok) {
+          (res.lotes || []).forEach(l => {
+            vivo[l.lote_id] = l;
+            if (l.foto) fotosMap[l.lote_id] = l.foto;
+          });
+          setAoVivo(true);
+        } else setAoVivo(false);
+      } catch { setAoVivo(false); }
+      setFotos(fotosMap);
+
       setRegistros((rows || [])
-        .map(r => ({ ...r, d: r.dados || {} }))
+        .map(r => {
+          const d = r.dados || {};
+          const v = vivo[d.lote_id];
+          // O disponível do momento manda: a cópia pode ter minutos de atraso
+          // e nesse intervalo alguém pode ter reservado.
+          return { ...r, d: v ? { ...d,
+            quantidade_disponivel: v.disponivel,
+            quantidade_reservada: v.reservado,
+            quantidade_total: v.total,
+            pronto_para_venda: v.pronto,
+            previsao_entrega: v.previsao_entrega,
+            previsao_reprogramada: v.previsao_reprogramada,
+          } : d };
+        })
         .sort((a, b) => (b.d.quantidade_disponivel || 0) - (a.d.quantidade_disponivel || 0)));
     } catch (e) { showToast('Erro ao carregar o estoque.'); }
     finally { setCarregando(false); }
@@ -4264,6 +4297,26 @@ function ProjetoEstoqueView({ showToast }) {
         .some(x => String(x || '').toLowerCase().includes(t));
     });
   }, [registros, busca, filtro]);
+
+  // O vendedor pensa em PEÇA, não em lote: "tenho 32 da 390x390?" é a
+  // pergunta. Agrupar por código+dimensão responde isso de uma vez, sem ele
+  // ter que somar lotes na cabeça. Dentro do grupo, cada lote segue separado
+  // porque é nele que a reserva acontece.
+  const agrupados = useMemo(() => {
+    const g = {};
+    filtrados.forEach(r => {
+      const d = r.d;
+      const k = `${d.codigo}|${d.dimensao || ''}`;
+      if (!g[k]) g[k] = { chave: k, codigo: d.codigo, dimensao: d.dimensao, descricao: d.descricao,
+        familia: d.familia, com_aba: d.com_aba, unidade: d.unidade, lote_id: d.lote_id,
+        disponivel: 0, total: 0, emProducao: 0, lotes: [] };
+      g[k].lotes.push(r);
+      g[k].disponivel += Number(d.quantidade_disponivel || 0);
+      if (d.em_producao) g[k].emProducao += Number(d.quantidade_total || 0);
+      else if (!d.vendido) g[k].total += Number(d.quantidade_total || 0);
+    });
+    return Object.values(g).sort((a, b) => b.disponivel - a.disponivel);
+  }, [filtrados]);
 
   const totais = useMemo(() => {
     const prontos = registros.filter(r => r.d.pronto_para_venda && (r.d.quantidade_disponivel || 0) > 0);
@@ -4328,7 +4381,12 @@ function ProjetoEstoqueView({ showToast }) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="font-black text-lg uppercase flex items-center gap-2"><Archive size={20} className="text-blue-600" /> Estoque da Fábrica</h2>
-              <p className="text-sm text-slate-500 mt-0.5">Peças prontas para venda imediata{ultimo ? ` · atualizado ${ultimo}` : ''}</p>
+              <p className="text-sm text-slate-500 mt-0.5">
+                Peças prontas para venda imediata
+                {aoVivo
+                  ? <span className="ml-2 text-emerald-600 font-bold">● saldo ao vivo</span>
+                  : <span className="ml-2 text-amber-600 font-bold">● saldo da última sincronização{ultimo ? ` (${ultimo})` : ''}</span>}
+              </p>
             </div>
             <div className="flex gap-2">
               <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Código, descrição, dimensão..." className="w-48 sm:w-72 px-3 py-2.5 rounded-lg border border-slate-200 text-sm outline-none focus:border-blue-500" />
@@ -4371,51 +4429,87 @@ function ProjetoEstoqueView({ showToast }) {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {filtrados.map(r => {
-              const d = r.d;
-              const pronto = d.pronto_para_venda && (d.quantidade_disponivel || 0) > 0;
+            {agrupados.map(g => {
+              const foto = g.lotes.map(l => fotos[l.d.lote_id]).find(Boolean);
+              const temPronto = g.disponivel > 0;
+              const vendidoSo = g.lotes.every(l => l.d.vendido);
+              // Lotes que o vendedor pode reservar agora, separados do que
+              // ainda está vindo — misturar faria ele prometer o que não tem.
+              const paraReservar = g.lotes.filter(l => l.d.pronto_para_venda && Number(l.d.quantidade_disponivel || 0) > 0);
+              const chegando = g.lotes.filter(l => l.d.em_producao);
               return (
-                <div key={r.id} className={`bg-white rounded-2xl border-2 p-4 ${d.vendido ? 'border-slate-200 opacity-70' : d.em_producao ? 'border-sky-200' : 'border-emerald-200'}`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                <div key={g.chave} className={`bg-white rounded-2xl border-2 overflow-hidden ${vendidoSo ? 'border-slate-200 opacity-70' : temPronto ? 'border-emerald-200' : 'border-sky-200'}`}>
+                  <div className="p-4 flex items-start gap-3">
+                    {foto ? (
+                      <img src={foto} alt={g.descricao}
+                        onClick={() => setAmpliada({ src: foto, titulo: `${g.codigo} · ${g.dimensao}` })}
+                        className="w-24 h-24 object-cover rounded-xl border-2 border-slate-200 cursor-zoom-in hover:border-blue-400 flex-shrink-0" />
+                    ) : (
+                      <div className="w-24 h-24 rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center flex-shrink-0">
+                        <Archive size={20} className="text-slate-300" />
+                      </div>
+                    )}
+
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-lg font-black text-slate-900">{d.codigo || '—'}</span>
-                        {d.dimensao && <span className="text-sm font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg">{d.dimensao}</span>}
-                        {d.com_aba != null && <span className="text-[11px] text-slate-400">{d.com_aba ? 'com aba' : 'sem aba'}</span>}
+                        <span className="text-lg font-black text-slate-900">{g.codigo || '—'}</span>
+                        {g.dimensao && <span className="text-sm font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-lg">{g.dimensao}</span>}
+                        {g.com_aba != null && <span className="text-[11px] text-slate-400">{g.com_aba ? 'com aba' : 'sem aba'}</span>}
                       </div>
-                      <p className="text-sm text-slate-600 mt-1 line-clamp-2">{d.descricao}</p>
-                      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[11px] text-slate-400">
-                        {d.op && <span>OP {d.op}</span>}
-                        {d.local && <span>{d.local}</span>}
-                        {d.familia && <span>{d.familia}</span>}
-                      </div>
+                      <p className="text-sm text-slate-600 mt-1 line-clamp-2">{g.descricao}</p>
+                      {g.familia && <p className="text-[11px] text-slate-400 mt-1">{g.familia}</p>}
                     </div>
+
                     <div className="text-right flex-shrink-0">
-                      {d.vendido ? (
-                        <span className="text-[11px] font-black px-2 py-1 rounded-lg bg-slate-200 text-slate-600">VENDIDO</span>
-                      ) : d.em_producao ? (
-                        <>
-                          <span className="text-[11px] font-black px-2 py-1 rounded-lg bg-sky-500 text-white">EM PRODUÇÃO</span>
-                          <p className="text-xs font-bold text-sky-700 mt-1.5">fica pronto {dataBR(d.previsao_entrega)}</p>
-                          {d.previsao_reprogramada && <p className="text-[10px] text-amber-600 font-bold">data reprogramada</p>}
-                          <p className="text-lg font-black text-slate-700 mt-1">{d.quantidade_total} pç</p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-[10px] font-black text-slate-400 uppercase">Disponível</p>
-                          <p className="text-3xl font-black text-emerald-600">{d.quantidade_disponivel}</p>
-                          <p className="text-[11px] text-slate-400">de {d.quantidade_total} {d.unidade || 'PC'}</p>
-                        </>
+                      <p className="text-[10px] font-black text-slate-400 uppercase">Disponível</p>
+                      <p className={`text-3xl font-black ${temPronto ? 'text-emerald-600' : 'text-slate-300'}`}>{g.disponivel}</p>
+                      <p className="text-[11px] text-slate-400">{g.unidade || 'PC'}</p>
+                      {g.emProducao > 0 && (
+                        <p className="text-[11px] font-bold text-sky-600 mt-1">+{g.emProducao} a caminho</p>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
-                    {pronto && (
-                      <button onClick={() => abrirReserva(r)} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold cursor-pointer">Reservar</button>
-                    )}
-                    <button onClick={() => setSelecionado(r)} className="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold cursor-pointer">Detalhes</button>
-                  </div>
+                  {/* Lotes prontos: cada um com seu botão, porque a reserva é
+                      por lote e eles podem estar em locais diferentes. */}
+                  {paraReservar.length > 0 && (
+                    <div className="border-t border-slate-100 divide-y divide-slate-50">
+                      {paraReservar.map(l => (
+                        <div key={l.id} className="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-emerald-50/40">
+                          <div className="min-w-0 text-xs text-slate-500">
+                            <span className="font-black text-emerald-600 text-sm">{l.d.quantidade_disponivel}</span>
+                            <span className="ml-1">{g.unidade || 'PC'}</span>
+                            {l.d.local && <span className="ml-2">· {l.d.local}</span>}
+                            {l.d.op && <span className="ml-2">· OP {l.d.op}</span>}
+                            {Number(l.d.quantidade_reservada) > 0 && <span className="ml-2 text-amber-600">({l.d.quantidade_reservada} reservadas)</span>}
+                          </div>
+                          <div className="flex gap-1.5 flex-shrink-0">
+                            <button onClick={() => setSelecionado(l)} className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold cursor-pointer">Detalhes</button>
+                            <button onClick={() => abrirReserva(l)} className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer">Reservar</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {chegando.length > 0 && (
+                    <div className="border-t border-slate-100 bg-sky-50/50 px-4 py-2.5 space-y-1">
+                      {chegando.map(l => (
+                        <p key={l.id} className="text-xs text-sky-800">
+                          <strong>{l.d.quantidade_total} {g.unidade || 'PC'}</strong> ficam prontos em{' '}
+                          <strong>{dataBR(l.d.previsao_entrega)}</strong>
+                          {l.d.op && <span className="text-sky-600"> · OP {l.d.op}</span>}
+                          {l.d.previsao_reprogramada && <span className="text-amber-600 font-bold"> · data reprogramada</span>}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+
+                  {vendidoSo && (
+                    <div className="border-t border-slate-100 px-4 py-2.5">
+                      <p className="text-xs text-slate-500">Todo o lote já foi vendido.</p>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -4487,6 +4581,15 @@ function ProjetoEstoqueView({ showToast }) {
         </div>
       )}
 
+      {ampliada && (
+        <div className="fixed inset-0 bg-slate-900/80 z-[110] flex items-center justify-center p-6" onClick={() => setAmpliada(null)}>
+          <div onClick={e => e.stopPropagation()} className="max-w-xl">
+            <img src={ampliada.src} alt={ampliada.titulo} className="rounded-2xl max-h-[75vh] w-auto" />
+            <p className="text-center text-white text-sm font-bold mt-3">{ampliada.titulo}</p>
+          </div>
+        </div>
+      )}
+
       {selecionado && (
         <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSelecionado(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
@@ -4495,6 +4598,9 @@ function ProjetoEstoqueView({ showToast }) {
               <button onClick={() => setSelecionado(null)} className="text-slate-300 hover:text-white cursor-pointer"><X size={20} /></button>
             </div>
             <div className="p-5 overflow-y-auto custom-scrollbar text-sm space-y-2">
+              {fotos[selecionado.d.lote_id] && (
+                <img src={fotos[selecionado.d.lote_id]} alt="" className="w-full max-h-52 object-contain rounded-xl bg-slate-50 mb-2" />
+              )}
               <p className="text-slate-700">{selecionado.d.descricao}</p>
               <div className="divide-y divide-slate-100">
                 {[['Dimensão', selecionado.d.dimensao], ['Com aba', selecionado.d.com_aba == null ? '—' : (selecionado.d.com_aba ? 'Sim' : 'Não')],
